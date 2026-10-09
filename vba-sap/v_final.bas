@@ -1,7 +1,7 @@
-Attribute VB_Name = "m_ZFI_TX04_008_AI_Buffer"
+Attribute VB_Name = "m_ZFI_TX04_008_AI"
 ' ========================================================================
-' Модуль: m_ZFI_TX04_008_AI_Buffer   (версия «БУФЕР ОБМЕНА», v2.10)
-' Запуск: Public Sub PDChange_Buffer
+' Модуль: m_ZFI_TX04_008_AI
+' Запуск: Public Sub PDChange
 ' Назначение: Регрессивное тестирование АИ (инцидент 6100013259)
 '             Выгрузка слепка таблицы ZFI_TX04_008_AI через SE16N
 '             (экспорт ALV -> буфер обмена Windows) и проверки по ТЗ:
@@ -9,20 +9,46 @@ Attribute VB_Name = "m_ZFI_TX04_008_AI_Buffer"
 '             Блок 2 — сверка итогов между версиями
 '             Блок 3 — консистентность шагов (при диапазоне шагов)
 '
-' Основа: optimized v2.00 (оригинал 1.42). Логика проверок и макет отчёта
-' идентичны версии v_file (m_ZFI_TX04_008_AI_File); отличается только способ
-' получения данных из SAP.
+' Зависимости:
+'   - m_sapGui: SAP_Connection, OpenTransaction, SendEnter, SetTextboxValue,
+'     GetStatusBarProperty, IsElementExists (модуль не входит в архив);
+'   - SAP GUI Scripting (поздняя привязка, ссылки в проекте не нужны);
+'   - Windows API: user32 (ShowWindow, SetForegroundWindow), kernel32 (Sleep,
+'     QueryPerformanceCounter, QueryPerformanceFrequency);
+'   - CreateObject: MSForms.DataObject (буфер обмена Windows), Scripting.Dictionary;
+'   - листы книги: «Итоговый отчет» (параметры B1:C5, результаты проверок),
+'     «ZFI_TX04_008_AI» (данные, пересоздаётся при каждом запуске),
+'     «Технический лист» (замеры, создаётся при отсутствии).
 '
-' Замеры: по этапам (подключение, экспорт, получение данных, разбор,
-' запись на лист, Блоки 1-3, вывод отчёта, итого) пишутся на «Технический
-' лист»: таблица этапов в колонках F:N, сводка «одна строка на прогон» —
-' с колонки P. История накапливается; колонка «Версия» = buffer/file.
-' Время — QueryPerformanceCounter (не зависит от полуночи и перевода часов).
+' Содержание:
+'   1. Windows API, константы (пути SAP, листы, параметры проверок, заголовки
+'      колонок), структуры, переменные уровня модуля
+'   2. Замеры времени по этапам (QueryPerformanceCounter) и запись замеров
+'      на «Технический лист»: столбцы A:H, строка на этап, история накапливается
+'   3. Сервисные процедуры: состояние Excel, листы, прогресс, очистка
+'   4. Работа с SAP GUI: ожидание, поиск элементов, статус-строка
+'   5. Буфер обмена Windows: очистка и ожидание данных
+'   6. Разбор данных: ключи, числа, даты, строки выгрузки, заголовок
+'   7. Флажок «Документ СПП», ключ группировки, кэш строк
+'   8. Таблица ошибок: шапка, пакетная запись, форматы
+'   9. Проверки: Check1_Quality, Check2_VersionsCompare, Check3_Consistency
+'  10. Параметры запуска, подготовка листов, распознавание колонок, лист данных
+'  11. ExportSe16n, ParseExport — получение и разбор выгрузки
+'  12. PDChange — основная процедура
 '
-' Зависимости: m_sapGui (SAP_Connection, OpenTransaction) — не входит в архив.
-' ВНИМАНИЕ: модуль не компилировался и не запускался (в среде подготовки
-' нет Excel/SAP). Перед внедрением: Debug -> Compile VBAProject и прогон
-' на копии книги (см. docs/vba-sap-optimization-report.md).
+' Алгоритм PDChange:
+'   1. Чтение параметров с листа «Итоговый отчет» (B1:C5) и флажка «Документ СПП».
+'   2. Подключение к SAP (SAP_Connection), очистка отчёта, пересоздание листа данных.
+'   3. SE16N: таблица, вариант просмотра, условия выборки (год, период, версии,
+'      шаги), выполнение выборки.
+'   4. Экспорт ALV в буфер обмена и ожидание данных (таймаут CLIP_WAIT_SEC —
+'      300 сек; размер данных должен перестать расти).
+'   5. Разбор текста в массив, распознавание колонок, кэш ключей строк.
+'   6. Запись данных на лист «ZFI_TX04_008_AI».
+'   7. Проверки: Блок 1 — по каждой версии, Блок 2 — между версиями, Блок 3 —
+'      по каждой версии при диапазоне шагов.
+'   8. Вывод таблицы ошибок на «Итоговый отчет», запись замеров на
+'      «Технический лист».
 ' ========================================================================
 Option Explicit
 ' ============================================================================
@@ -48,15 +74,13 @@ Private Declare Function QueryPerformanceFrequency Lib "kernel32" (ByRef lpFrequ
 ' ============================================================================
 ' Константы путей к элементам SAP (SE16N, таблица ZFI_TX04_008_AI)
 ' ============================================================================
-Private Const SAP_SBAR              As String = "wnd[0]/sbar"
 Private Const SAP_TABLE_NAME        As String = "ZFI_TX04_008_AI"
 Private Const SAP_SE16N_TABLE       As String = "wnd[0]/usr/ctxtGD-TAB"
 Private Const SAP_SE16N_VARIANT     As String = "wnd[0]/usr/ctxtGD-VARIANT"
 Private Const SAP_SE16N_MAXLINES    As String = "wnd[0]/usr/txtGD-MAX_LINES"
 Private Const SAP_SE16N_EXECUTE_BTN As String = "wnd[0]/tbar[1]/btn[8]"
 Private Const SAP_SE16N_GRID        As String = "wnd[0]/usr/cntlRESULT_LIST/shellcont/shell"
-' ВНИМАНИЕ: индексы строк таблицы полей [2,N] зависят от состава полей
-' варианта /REGRESSIVE — проверить при первом запуске
+' Индексы строк таблицы полей [2,N] зависят от состава полей варианта /REGRESSIVE
 Private Const SAP_SE16N_FLD_GJAHR   As String = "wnd[0]/usr/tblSAPLSE16NSELFIELDS_TC/ctxtGS_SELFIELDS-LOW[2,2]"
 Private Const SAP_SE16N_FLD_MONAT   As String = "wnd[0]/usr/tblSAPLSE16NSELFIELDS_TC/ctxtGS_SELFIELDS-LOW[2,3]"
 Private Const SAP_SE16N_FLD_VERS    As String = "wnd[0]/usr/tblSAPLSE16NSELFIELDS_TC/ctxtGS_SELFIELDS-LOW[2,4]"
@@ -72,10 +96,9 @@ Private Const SAP_EXPORT_DLG_OK     As String = "wnd[1]/tbar[0]/btn[0]"
 ' ============================================================================
 ' Тайминги и режимы
 ' ============================================================================
-Private Const CLIP_WAIT_SEC         As Double = 900     ' Таймаут ожидания буфера обмена
+Private Const CLIP_WAIT_SEC         As Double = 300     ' Таймаут ожидания буфера обмена, сек
 Private Const SAP_BUSY_TIMEOUT_SEC  As Double = 600     ' Таймаут «сессия SAP занята»
-Private Const SAVE_RAW_DUMP         As Boolean = False  ' True — дамп буфера на «Технический лист»
-Private Const ERR_BUF_ROWS          As Long = 2000      ' Размер буфера записи таблицы ошибок
+Private Const ERR_BATCH_ROWS        As Long = 2000      ' Размер пакета записи таблицы ошибок
 Private Const ERR_CUSTOM            As Long = vbObjectError + 513  ' Контролируемая ошибка (без кода в сообщении)
 ' ============================================================================
 ' Имена листов Excel
@@ -187,13 +210,12 @@ Private m_arrDocSFEmpty() As Boolean
 Private m_nGrp         As Long     ' Число групп
 Private m_grpNames     As Variant  ' Имена групп: m_grpNames(g - 1)
 Private m_dictGrp      As Object
-' --- Буфер записи таблицы ошибок ---
-Private m_eb()         As Variant  ' (1 To ERR_BUF_ROWS, 1 To ERR_COLS)
-Private m_ebLink()     As Variant  ' (1 To ERR_BUF_ROWS, 1 To 1) формулы дриллдауна
+' --- Пакет записи таблицы ошибок ---
+Private m_eb()         As Variant  ' (1 To ERR_BATCH_ROWS, 1 To ERR_COLS)
+Private m_ebLink()     As Variant  ' (1 To ERR_BATCH_ROWS, 1 To 1) формулы дриллдауна
 Private m_ebKind()     As Byte     ' 1 — в строке даты, 0 — числа
 Private m_ebN          As Long
 Private m_ebFirstRow   As Long
-Private Const MODULE_TAG As String = "buffer"
 ' ============================================================================
 ' Замеры времени по этапам: константы и переменные
 ' ============================================================================
@@ -211,8 +233,8 @@ Private Const ST_B3      As Long = 11   ' Блок 3
 Private Const ST_REPORT  As Long = 12   ' Вывод отчёта
 Private Const ST_TOTAL   As Long = 13   ' Итого
 Private Const ST_COUNT   As Long = 13
-Private Const TM_COL     As Long = 6    ' Колонка F технического листа: таблица этапов
-Private Const TM_SUM_COL As Long = 16   ' Колонка P технического листа: сводка по прогонам
+Private Const TM_COL     As Long = 1    ' Колонка A технического листа: таблица этапов
+Private Const TM_COLS    As Long = 8    ' Число колонок таблицы этапов (A:H)
 Private m_qpcFreq     As Double         ' Частота QueryPerformanceCounter (0 — не опрошена, -1 — недоступна)
 Private m_startClock  As Date           ' Время запуска (для таблицы)
 Private m_stT0(1 To 13)    As Double    ' Старт текущего интервала этапа
@@ -220,7 +242,7 @@ Private m_stDur(1 To 13)   As Double    ' Накопленная длительность этапа, сек
 Private m_stClock(1 To 13) As Date      ' Время первого старта этапа
 Private m_stOpen(1 To 13)  As Boolean   ' Интервал открыт
 Private m_stUsed(1 To 13)  As Boolean   ' Этап запускался
-Private m_flushInBlock     As Double    ' Время записи буфера ошибок внутри текущего блока проверок
+Private m_flushInBlock     As Double    ' Время записи пакета ошибок внутри текущего блока проверок
 Private m_flushBlocksTotal As Double    ' То же за все блоки (переносится в «Вывод отчёта»)
 Private m_runRows          As Long      ' Строк в выгрузке (для таблицы замеров)
 ' ============================================================================
@@ -266,7 +288,7 @@ Private Sub TimerBegin(ByVal id As Long)
     End If
 End Sub
 ' Закрывает интервал и прибавляет его длительность к этапу (интервалы суммируются).
-' Из блоков проверок вычитается время записи буфера ошибок: оно относится к «Выводу отчёта».
+' Из блоков проверок вычитается время записи пакета ошибок: оно относится к «Выводу отчёта».
 Private Sub TimerEnd(ByVal id As Long)
     Dim d As Double
     If Not m_stOpen(id) Then Exit Sub
@@ -280,13 +302,13 @@ Private Sub TimerEnd(ByVal id As Long)
     m_stDur(id) = m_stDur(id) + d
     m_stOpen(id) = False
 End Sub
-' Таблица этапов (F:N) и сводка по прогонам (P:...) на техническом листе;
-' история накапливается между прогонами и между версиями модуля. Возврат — номер прогона.
+' Таблица этапов (столбцы A:H) на техническом листе; история накапливается
+' между прогонами. Возврат — номер прогона.
 Private Function WriteTimings(ByVal ok As Boolean, ByVal note As String) As Long
     Dim ws As Worksheet
     Dim i As Long, runNo As Long, lastRow As Long, r0 As Long
     Dim tot As Double
-    Dim tbl() As Variant, sumRow() As Variant
+    Dim tbl() As Variant
     On Error GoTo WtErr
     Set ws = m_wsTech
     If ws Is Nothing Then Exit Function
@@ -306,12 +328,12 @@ Private Function WriteTimings(ByVal ok As Boolean, ByVal note As String) As Long
     m_stClock(ST_TOTAL) = m_startClock
     m_stUsed(ST_TOTAL) = True
     If Len(CStr(ws.Cells(1, TM_COL).Value)) = 0 Then
-        ws.Cells(1, TM_COL).Resize(1, 9).Value = Array("Прогон №", "Версия", "Запуск", "Этап", _
+        ws.Cells(1, TM_COL).Resize(1, TM_COLS).Value = Array("Прогон №", "Запуск", "Этап", _
             "Начало этапа", "Длительность, сек", "% от общего", "Строк в выгрузке", "Примечание")
-        ws.Cells(1, TM_COL).Resize(1, 9).Font.Bold = True
-        ws.Columns(TM_COL + 3).ColumnWidth = 62
-        ws.Columns(TM_COL + 2).ColumnWidth = 19
-        ws.Columns(TM_COL + 8).ColumnWidth = 60
+        ws.Cells(1, TM_COL).Resize(1, TM_COLS).Font.Bold = True
+        ws.Columns(TM_COL + 2).ColumnWidth = 62
+        ws.Columns(TM_COL + 1).ColumnWidth = 19
+        ws.Columns(TM_COL + 7).ColumnWidth = 60
     End If
     lastRow = ws.Cells(ws.Rows.Count, TM_COL).End(xlUp).Row
     If lastRow < 1 Then lastRow = 1
@@ -320,53 +342,25 @@ Private Function WriteTimings(ByVal ok As Boolean, ByVal note As String) As Long
         runNo = CLng(Application.WorksheetFunction.Max(ws.Range(ws.Cells(2, TM_COL), ws.Cells(lastRow, TM_COL)))) + 1
     End If
     r0 = lastRow + 1
-    ReDim tbl(1 To ST_COUNT, 1 To 9)
+    ReDim tbl(1 To ST_COUNT, 1 To TM_COLS)
     For i = 1 To ST_COUNT
         tbl(i, 1) = runNo
-        tbl(i, 2) = MODULE_TAG
-        tbl(i, 3) = m_startClock
-        tbl(i, 4) = StageName(i)
-        If m_stUsed(i) Then tbl(i, 5) = m_stClock(i)
-        tbl(i, 6) = Round(m_stDur(i), 3)
-        If tot > 0# Then tbl(i, 7) = m_stDur(i) / tot
-        tbl(i, 8) = m_runRows
+        tbl(i, 2) = m_startClock
+        tbl(i, 3) = StageName(i)
+        If m_stUsed(i) Then tbl(i, 4) = m_stClock(i)
+        tbl(i, 5) = Round(m_stDur(i), 3)
+        If tot > 0# Then tbl(i, 6) = m_stDur(i) / tot
+        tbl(i, 7) = m_runRows
     Next i
-    tbl(ST_TOTAL, 9) = IIf(ok, "OK", "ОШИБКА") & ". " & note
-    With ws.Cells(r0, TM_COL).Resize(ST_COUNT, 9)
-        .Value = tbl
-    End With
-    ws.Range(ws.Cells(r0, TM_COL + 2), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 2)).NumberFormat = "dd.mm.yyyy hh:mm:ss"
-    ws.Range(ws.Cells(r0, TM_COL + 4), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 4)).NumberFormat = "hh:mm:ss"
-    ws.Range(ws.Cells(r0, TM_COL + 5), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 5)).NumberFormat = "0.00"
-    ws.Range(ws.Cells(r0, TM_COL + 6), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 6)).NumberFormat = "0.0%"
-    ws.Range(ws.Cells(r0, TM_COL + 7), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 7)).NumberFormat = "#,##0"
-    ws.Cells(r0 + ST_COUNT - 1, TM_COL).Resize(1, 9).Font.Bold = True
-    ws.Cells(r0 + ST_COUNT - 1, TM_COL).Resize(1, 9).Borders(xlEdgeBottom).LineStyle = xlContinuous
-    ' --- Сводка: одна строка на прогон (удобно сравнивать buffer и file) ---
-    If Len(CStr(ws.Cells(1, TM_SUM_COL).Value)) = 0 Then
-        ws.Cells(1, TM_SUM_COL).Resize(1, 4).Value = Array("Прогон №", "Версия", "Запуск", "Строк")
-        For i = 1 To ST_COUNT
-            ws.Cells(1, TM_SUM_COL + 3 + i).Value = StageName(i) & ", сек"
-        Next i
-        ws.Cells(1, TM_SUM_COL + 4 + ST_COUNT).Value = "Результат"
-        ws.Cells(1, TM_SUM_COL).Resize(1, 5 + ST_COUNT).Font.Bold = True
-        ws.Cells(1, TM_SUM_COL).Resize(1, 5 + ST_COUNT).WrapText = True
-    End If
-    lastRow = ws.Cells(ws.Rows.Count, TM_SUM_COL).End(xlUp).Row
-    If lastRow < 1 Then lastRow = 1
-    ReDim sumRow(1 To 1, 1 To 5 + ST_COUNT)
-    sumRow(1, 1) = runNo
-    sumRow(1, 2) = MODULE_TAG
-    sumRow(1, 3) = m_startClock
-    sumRow(1, 4) = m_runRows
-    For i = 1 To ST_COUNT
-        sumRow(1, 4 + i) = Round(m_stDur(i), 3)
-    Next i
-    sumRow(1, 5 + ST_COUNT) = IIf(ok, "OK", "ОШИБКА")
-    ws.Cells(lastRow + 1, TM_SUM_COL).Resize(1, 5 + ST_COUNT).Value = sumRow
-    ws.Cells(lastRow + 1, TM_SUM_COL + 2).NumberFormat = "dd.mm.yyyy hh:mm:ss"
-    ws.Cells(lastRow + 1, TM_SUM_COL + 3).NumberFormat = "#,##0"
-    ws.Cells(lastRow + 1, TM_SUM_COL + 4).Resize(1, ST_COUNT).NumberFormat = "0.00"
+    tbl(ST_TOTAL, 8) = IIf(ok, "OK", "ОШИБКА") & ". " & note
+    ws.Cells(r0, TM_COL).Resize(ST_COUNT, TM_COLS).Value = tbl
+    ws.Range(ws.Cells(r0, TM_COL + 1), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 1)).NumberFormat = "dd.mm.yyyy hh:mm:ss"
+    ws.Range(ws.Cells(r0, TM_COL + 3), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 3)).NumberFormat = "hh:mm:ss"
+    ws.Range(ws.Cells(r0, TM_COL + 4), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 4)).NumberFormat = "0.00"
+    ws.Range(ws.Cells(r0, TM_COL + 5), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 5)).NumberFormat = "0.0%"
+    ws.Range(ws.Cells(r0, TM_COL + 6), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 6)).NumberFormat = "#,##0"
+    ws.Cells(r0 + ST_COUNT - 1, TM_COL).Resize(1, TM_COLS).Font.Bold = True
+    ws.Cells(r0 + ST_COUNT - 1, TM_COL).Resize(1, TM_COLS).Borders(xlEdgeBottom).LineStyle = xlContinuous
     WriteTimings = runNo
     Exit Function
 WtErr:
@@ -498,28 +492,22 @@ End Function
 ' ============================================================================
 ' Работа с SAP GUI
 ' ============================================================================
-Private Function SapStatusText(ByVal sess As Object) As String
-    Dim sb As Object
-    On Error Resume Next
-    Set sb = sess.findById(SAP_SBAR, False)
-    If Not sb Is Nothing Then SapStatusText = sb.MessageType & ": " & sb.Text
+Private Function SapStatusText() As String
+    SapStatusText = GetStatusBarProperty("Message Type") & ": " & GetStatusBarProperty("Text")
 End Function
 
 ' Элемент или понятная ошибка (с путём и текстом статус-строки SAP)
 Private Function SapEl(ByVal sess As Object, ByVal id As String) As Object
-    Dim el As Object
-    On Error Resume Next
-    Set el = sess.findById(id, False)
-    On Error GoTo 0
-    If el Is Nothing Then
+    If Not IsElementExists(id) Then
         Fail "Элемент SAP GUI не найден: " & id & ". Проверьте текущий экран SAP, вариант " & _
-            "просмотра и индексы полей. Статус-строка SAP: " & SapStatusText(sess)
+            "просмотра и индексы полей. Статус-строка SAP: " & SapStatusText()
     End If
-    Set SapEl = el
+    Set SapEl = sess.findById(id)
 End Function
 
 Private Sub SapSetText(ByVal sess As Object, ByVal id As String, ByVal value As String)
-    SapEl(sess, id).Text = value
+    SapEl sess, id
+    SetTextboxValue id, value
 End Sub
 
 Private Sub SapWaitReady(ByVal sess As Object)
@@ -535,14 +523,10 @@ Private Sub SapWaitReady(ByVal sess As Object)
 End Sub
 
 ' Ошибочное сообщение SAP (тип E/A) прерывает выполнение с его текстом
-Private Sub SapCheckStatus(ByVal sess As Object, ByVal ctx As String)
-    Dim sb As Object, t As String
-    On Error Resume Next
-    Set sb = sess.findById(SAP_SBAR, False)
-    If sb Is Nothing Then Exit Sub
-    t = sb.MessageType
-    On Error GoTo 0
-    If t = "E" Or t = "A" Then Fail ctx & ": SAP вернул сообщение типа " & t & ": " & sb.Text
+Private Sub SapCheckStatus(ByVal ctx As String)
+    Dim t As String
+    t = GetStatusBarProperty("Message Type")
+    If t = "E" Or t = "A" Then Fail ctx & ": SAP вернул сообщение типа " & t & ": " & GetStatusBarProperty("Text")
 End Sub
 
 ' ============================================================================
@@ -563,10 +547,10 @@ Private Function ClearClipboard(ByVal dataObj As Object, ByVal attempts As Long)
     Next t
 End Function
 
-' Ждёт данных в буфере; текст пишется прямо в bufferText (ByRef, без копий
+' Ждёт данных в буфере обмена; текст пишется прямо в exportText (ByRef, без копий
 ' 100+ МБ). Размер должен перестать расти (защита от неполной выгрузки).
 Private Function WaitClipboardText(ByVal dataObj As Object, ByVal marker As String, _
-    ByVal timeoutSec As Double, ByRef bufferText As String, _
+    ByVal timeoutSec As Double, ByRef exportText As String, _
     ByVal pct As Long, ByVal stageTxt As String) As Boolean
     Dim t0 As Double
     Dim prevLen As Long, stableTicks As Long
@@ -575,32 +559,32 @@ Private Function WaitClipboardText(ByVal dataObj As Object, ByVal marker As Stri
     Do
         On Error Resume Next
         dataObj.GetFromClipboard
-        bufferText = dataObj.GetText(1)
+        exportText = dataObj.GetText(1)
         On Error GoTo 0
-        If Len(bufferText) > 1 Then
-            If ElapsedSec(t0) < 10 And Len(bufferText) > 1000000 And suspicious < 3 Then
+        If Len(exportText) > 1 Then
+            If ElapsedSec(t0) < 10 And Len(exportText) > 1000000 And suspicious < 3 Then
                 ' 1+ МБ за первые 10 сек физически невозможны — это остаток прошлого прогона
                 suspicious = suspicious + 1
                 ClearClipboard dataObj, 1
                 prevLen = -1
                 stableTicks = 0
             Else
-                If Len(bufferText) = prevLen Then
+                If Len(exportText) = prevLen Then
                     stableTicks = stableTicks + 1
                 Else
                     stableTicks = 0
-                    prevLen = Len(bufferText)
+                    prevLen = Len(exportText)
                 End If
-                If stableTicks >= 3 And InStr(bufferText, marker) > 0 Then
+                If stableTicks >= 3 And InStr(exportText, marker) > 0 Then
                     WaitClipboardText = True
                     ClearClipboard dataObj, 1
                     Exit Function
                 End If
             End If
         End If
-        ShowProgress pct, stageTxt & " (ожидание буфера: " & Format(ElapsedSec(t0), "0") & _
-            " сек, в буфере " & Format(Len(bufferText) / 1048576, "0.0") & " МБ)"
-        If Len(bufferText) > 1 Then PauseMs 500 Else PauseMs 250
+        ShowProgress pct, stageTxt & " (ожидание буфера обмена: " & Format(ElapsedSec(t0), "0") & _
+            " сек, в буфере обмена " & Format(Len(exportText) / 1048576, "0.0") & " МБ)"
+        If Len(exportText) > 1 Then PauseMs 500 Else PauseMs 250
     Loop While ElapsedSec(t0) < timeoutSec
 End Function
 
@@ -680,28 +664,17 @@ Private Sub ClearArray(ByRef arr As Variant)
     arr = Empty
 End Sub
 
-Private Sub SplitBufferLines(ByRef bufferText As String, ByRef clipLines() As String)
-    If InStr(bufferText, vbCrLf) > 0 Then
-        clipLines = Split(bufferText, vbCrLf)
-    ElseIf InStr(bufferText, vbLf) > 0 Then
-        clipLines = Split(bufferText, vbLf)
-    ElseIf InStr(bufferText, vbCr) > 0 Then
-        clipLines = Split(bufferText, vbCr)
+Private Sub SplitExportLines(ByRef exportText As String, ByRef clipLines() As String)
+    If InStr(exportText, vbCrLf) > 0 Then
+        clipLines = Split(exportText, vbCrLf)
+    ElseIf InStr(exportText, vbLf) > 0 Then
+        clipLines = Split(exportText, vbLf)
+    ElseIf InStr(exportText, vbCr) > 0 Then
+        clipLines = Split(exportText, vbCr)
     Else
         ReDim clipLines(0 To 0)
-        clipLines(0) = bufferText
+        clipLines(0) = exportText
     End If
-End Sub
-
-Private Sub WriteLinesToSheet(ByVal ws As Worksheet, ByRef clipLines() As String)
-    Dim arrClip() As Variant
-    Dim clipCount As Long, lineIdx As Long
-    clipCount = UBound(clipLines) + 1
-    ReDim arrClip(1 To clipCount, 1 To 1)
-    For lineIdx = 0 To UBound(clipLines)
-        arrClip(lineIdx + 1, 1) = clipLines(lineIdx)
-    Next lineIdx
-    ws.Range("A1").Resize(clipCount, 1).Value = arrClip
 End Sub
 
 Private Function ResolveColumnIndex(ByRef headerParts As Variant, ByVal colCount As Long, _
@@ -723,7 +696,7 @@ Private Function IsSeparatorLine(ByRef ln As String) As Boolean
     IsSeparatorLine = (Len(Replace(Replace(ln, "-", ""), "|", "")) = 0)
 End Function
 
-' Индекс строки заголовка в буфере (-1 — не найдена)
+' Индекс строки заголовка в выгрузке (-1 — не найдена)
 Private Function FindHeaderLine(ByRef clipLines() As String) As Long
     Dim i As Long, ln As String
     FindHeaderLine = -1
@@ -855,7 +828,7 @@ Private Sub BuildRowCache(ByRef arrData As Variant, ByVal totalRows As Long, _
 End Sub
 
 ' ============================================================================
-' Таблица ошибок: шапка, буфер записи, ширины
+' Таблица ошибок: шапка, пакет записи, ширины
 ' ============================================================================
 Private Sub WriteErrTableHeader(ByVal wsReport As Worksheet, ByVal resRow As Long)
     wsReport.Cells(resRow, 1).Value = "Блок проверки"
@@ -891,10 +864,10 @@ Private Sub SetErrColumnWidths(ByVal wsReport As Worksheet)
     wsReport.Columns("J").ColumnWidth = 90
 End Sub
 
-Private Sub InitErrBuf()
-    ReDim m_eb(1 To ERR_BUF_ROWS, 1 To ERR_COLS)
-    ReDim m_ebLink(1 To ERR_BUF_ROWS, 1 To 1)
-    ReDim m_ebKind(1 To ERR_BUF_ROWS)
+Private Sub InitErrBatch()
+    ReDim m_eb(1 To ERR_BATCH_ROWS, 1 To ERR_COLS)
+    ReDim m_ebLink(1 To ERR_BATCH_ROWS, 1 To 1)
+    ReDim m_ebKind(1 To ERR_BATCH_ROWS)
     m_ebN = 0
     m_hdrWritten = False
 End Sub
@@ -911,7 +884,7 @@ Private Function NumOrText(ByVal s As String) As Variant
 End Function
 
 ' Запись накопленных строк одним присваиванием; форматы — по диапазонам
-Private Sub FlushErrBuf()
+Private Sub FlushErrBatch()
     Dim n As Long, r As Long, c As Long, runStart As Long
     Dim tmp() As Variant, tmpLink() As Variant
     Dim tFlush As Double
@@ -949,7 +922,7 @@ Private Sub FlushErrBuf()
     m_ebN = 0
 End Sub
 
-' Формат колонок «Значение»/«Эталон» для серии строк буфера с одним типом
+' Формат колонок «Значение»/«Эталон» для серии строк пакета с одним типом
 Private Sub ApplyKindFormat(ByVal fromIdx As Long, ByVal toIdx As Long)
     Dim fmt As String
     If m_ebKind(fromIdx) = 1 Then fmt = "DD.MM.YYYY" Else fmt = "#,##0.00"
@@ -1002,7 +975,7 @@ Private Sub AddErrRow(ByRef resRow As Long, ByVal blockName As String, ByVal ver
     If IsNumeric(valRef) And IsNumeric(valCur) Then m_eb(n, 9) = CDbl(valRef) - CDbl(valCur)
     m_eb(n, 10) = errText
     resRow = resRow + 1
-    If n >= ERR_BUF_ROWS Then FlushErrBuf
+    If n >= ERR_BATCH_ROWS Then FlushErrBatch
 End Sub
 
 ' ============================================================================
@@ -1365,7 +1338,6 @@ Private Sub PrepareSheets(ByVal wbData As Workbook, ByVal wsReport As Worksheet,
     wsData.Name = SHEET_DATA
     Set m_wsData = wsData
     wsReport.Activate
-    m_wsTech.Range("A:D").ClearContents
 End Sub
 
 ' ============================================================================
@@ -1466,7 +1438,7 @@ Private Function StageName(ByVal i As Long) As String
         "Блок 2 (сверка версий)", "Блок 3 (консистентность шагов)", _
         "Вывод отчёта (таблица ошибок, фильтры, ширины)", "ИТОГО")
 End Function
-' Строки буфера -> двумерный массив (1 To maxRows, 1 To colCount); возврат — число строк
+' Строки выгрузки -> двумерный массив (1 To maxRows, 1 To colCount); возврат — число строк
 Private Function ParseDataLines(ByRef clipLines() As String, ByVal headerIdx As Long, _
     ByVal colCount As Long, ByRef sumColFlag() As Boolean, ByVal maxRows As Long, _
     ByRef arrOut As Variant) As Long
@@ -1497,10 +1469,10 @@ Private Function ParseDataLines(ByRef clipLines() As String, ByVal headerIdx As 
     ParseDataLines = rowN
 End Function
 ' ============================================================================
-' Экспорт SE16N -> буфер обмена -> bufferText
+' Экспорт SE16N -> буфер обмена -> exportText
 ' ============================================================================
-Private Sub ExportSe16nToBuffer(ByVal sess As Object, ByRef p As TRunParams, _
-    ByRef bufferText As String, ByRef rowCountSAP As Long)
+Private Sub ExportSe16n(ByVal sess As Object, ByRef p As TRunParams, _
+    ByRef exportText As String, ByRef rowCountSAP As Long)
     Dim grid As Object, dataObj As Object
     Dim waitStage As String
     TimerBegin ST_SE16N
@@ -1509,17 +1481,17 @@ Private Sub ExportSe16nToBuffer(ByVal sess As Object, ByRef p As TRunParams, _
     SapWaitReady sess
     ShowProgress 11, "SE16N: загрузка таблицы " & SAP_TABLE_NAME & "..."
     On Error Resume Next
-    sess.findById(SAP_SE16N_TABLE).Text = SAP_TABLE_NAME
+    SetTextboxValue SAP_SE16N_TABLE, SAP_TABLE_NAME
     On Error GoTo 0
-    SapEl(sess, "wnd[0]").sendVKey 0
+    SendEnter
     SapWaitReady sess
     ShowProgress 12, "SE16N: загрузка варианта /" & p.VariantName & "..."
     SapSetText sess, SAP_SE16N_VARIANT, "/" & p.VariantName
-    SapEl(sess, "wnd[0]").sendVKey 0
+    SendEnter
     SapWaitReady sess
-    SapCheckStatus sess, "Загрузка варианта /" & p.VariantName
+    SapCheckStatus "Загрузка варианта /" & p.VariantName
     On Error Resume Next
-    sess.findById(SAP_SE16N_MAXLINES).Text = ""
+    SetTextboxValue SAP_SE16N_MAXLINES, ""
     On Error GoTo 0
     ShowProgress 15, "SE16N: заполнение полей выбора (год " & p.Gjahr & ", период " & p.Monat & _
         ", версия " & p.VersLabel & ")..."
@@ -1549,7 +1521,7 @@ Private Sub ExportSe16nToBuffer(ByVal sess As Object, ByRef p As TRunParams, _
     ShowProgress 20, "SE16N: выполнение выборки..."
     SapEl(sess, SAP_SE16N_EXECUTE_BTN).press
     SapWaitReady sess
-    SapCheckStatus sess, "Выполнение выборки"
+    SapCheckStatus "Выполнение выборки"
     ShowProgress 22, "SE16N: чтение результата выборки..."
     Set grid = SapEl(sess, SAP_SE16N_GRID)
     rowCountSAP = grid.rowCount
@@ -1573,28 +1545,24 @@ Private Sub ExportSe16nToBuffer(ByVal sess As Object, ByRef p As TRunParams, _
     SapEl(sess, SAP_EXPORT_DLG_FLAG).Select
     SapEl(sess, SAP_EXPORT_DLG_FLAG).SetFocus
     SapEl(sess, SAP_EXPORT_DLG_OK).press
-    If Not WaitClipboardText(dataObj, "|", CLIP_WAIT_SEC, bufferText, 23, waitStage) Then
+    If Not WaitClipboardText(dataObj, "|", CLIP_WAIT_SEC, exportText, 23, waitStage) Then
         Fail "Система SAP не успела передать данные в буфер обмена за " & _
             Format(CLIP_WAIT_SEC, "0") & " сек. Попробуйте запустить скрипт снова."
     End If
     TimerEnd ST_EXPORT
 End Sub
 ' ============================================================================
-' Буфер -> массив данных + заголовок
+' Текст выгрузки -> массив данных + заголовок
 ' ============================================================================
-Private Sub ParseExport(ByRef bufferText As String, ByVal rowCountSAP As Long, _
+Private Sub ParseExport(ByRef exportText As String, ByVal rowCountSAP As Long, _
     ByRef arrData As Variant, ByRef headerParts As Variant, ByRef colCount As Long, _
     ByRef sumColFlag() As Boolean, ByRef totalRows As Long, ByVal variantName As String)
     Dim clipLines() As String
     Dim headerIdx As Long
     TimerBegin ST_GET
-    ShowProgress 33, "Буфер получен (" & Format(Len(bufferText), "#,##0") & " симв.). Разбор строк..."
-    SplitBufferLines bufferText, clipLines
-    bufferText = ""
-    If SAVE_RAW_DUMP Then
-        ShowProgress 35, "Дамп на технический лист..."
-        WriteLinesToSheet m_wsTech, clipLines
-    End If
+    ShowProgress 33, "Данные из буфера обмена получены (" & Format(Len(exportText), "#,##0") & " симв.). Разбор строк..."
+    SplitExportLines exportText, clipLines
+    exportText = ""
     ShowProgress 37, "Поиск строки заголовка в выгрузке..."
     headerIdx = FindHeaderLine(clipLines)
     If headerIdx < 0 Then
@@ -1613,16 +1581,16 @@ Private Sub ParseExport(ByRef bufferText As String, ByVal rowCountSAP As Long, _
     End If
 End Sub
 ' ============================================================================
-' ОСНОВНАЯ ПРОЦЕДУРА (версия «буфер обмена»)
-' Алгоритм: параметры -> подключение к SAP -> очистка листов -> SE16N + экспорт в буфер
+' ОСНОВНАЯ ПРОЦЕДУРА
+' Алгоритм: параметры -> подключение к SAP -> очистка листов -> SE16N + экспорт в буфер обмена
 '   -> парсинг -> колонки -> кэш -> лист данных -> проверки (Блоки 1-3) -> отчёт -> замеры
 ' ============================================================================
-Public Sub PDChange_Buffer()
+Public Sub PDChange()
     Dim p As TRunParams
     Dim cols As TCols
     Dim wbData As Workbook, wsReport As Worksheet, wsData As Worksheet
     Dim sess As Object, chkDocSPP As Object
-    Dim bufferText As String
+    Dim exportText As String
     Dim arrData As Variant, headerParts As Variant
     Dim sumColFlag() As Boolean
     Dim rowCountSAP As Long, totalRows As Long, colCount As Long
@@ -1667,8 +1635,8 @@ Public Sub PDChange_Buffer()
     Application.EnableEvents = False
     Application.Interactive = False
     ShowProgress 5, "SAP подключён. Работа с SE16N..."
-    ExportSe16nToBuffer sess, p, bufferText, rowCountSAP
-    ParseExport bufferText, rowCountSAP, arrData, headerParts, colCount, sumColFlag, totalRows, p.VariantName
+    ExportSe16n sess, p, exportText, rowCountSAP
+    ParseExport exportText, rowCountSAP, arrData, headerParts, colCount, sumColFlag, totalRows, p.VariantName
     m_runRows = totalRows
     ShowProgress 89, "Данные разобраны (" & Format(totalRows, "#,##0") & " строк). Распознавание колонок..."
     ResolveColumns headerParts, colCount, cols, p.VariantName
@@ -1683,7 +1651,7 @@ Public Sub PDChange_Buffer()
     ClearArray arrData
     TimerEnd ST_WRITE
     ShowProgress 92, "Выполнение проверок (Блоки 1-3)..."
-    InitErrBuf
+    InitErrBatch
     TimerBegin ST_REPORT
     resRow = RES_ROW_FIRST
     wsReport.Cells(resRow, 1).Value = "РЕЗУЛЬТАТЫ ПРОВЕРОК"
@@ -1723,7 +1691,7 @@ Public Sub PDChange_Buffer()
         kCheck = kCheck + 1
     Next vIdx
     TimerBegin ST_REPORT
-    FlushErrBuf
+    FlushErrBatch
     If m_hdrWritten Then
         wsReport.Range(wsReport.Cells(m_hdrRow, 1), wsReport.Cells(resRow - 1, ERR_COLS)).AutoFilter
     Else
@@ -1736,15 +1704,15 @@ Public Sub PDChange_Buffer()
     TimerEnd ST_REPORT
     runNo = WriteTimings(True, "Версии " & p.VersLabel & "; шаги " & p.StepsLabel & "; период " & _
         p.Gjahr & "/" & p.Monat & "; Документ СПП: " & IIf(m_docSPPOn, "вкл", "выкл") & _
-        "; экспорт через буфер обмена")
+        "")
     totalSec = ElapsedSec(m_startTime)
     Set sess = Nothing
     CleanupRun True
     wsReport.Calculate
     ActivateExcel
     wsReport.Activate
-    ShowProgress 100, "Готово (buffer, прогон " & runNo & "): " & Round(totalSec, 1) & " сек"
-    MsgBox "Выполнено успешно (версия buffer, прогон № " & runNo & ", " & Format(totalSec, "0.0") & _
+    ShowProgress 100, "Готово (прогон " & runNo & "): " & Round(totalSec, 1) & " сек"
+    MsgBox "Выполнено успешно (прогон № " & runNo & ", " & Format(totalSec, "0.0") & _
         " сек). Результаты проверок — на листе '" & SHEET_REPORT & "', замеры — на листе '" & SHEET_TECH & "'.", vbInformation
     Exit Sub
 ErrorHandler:
