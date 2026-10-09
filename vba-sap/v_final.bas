@@ -1,54 +1,54 @@
 Attribute VB_Name = "m_ZFI_TX04_008_AI"
 ' ========================================================================
-' Модуль: m_ZFI_TX04_008_AI
-' Запуск: Public Sub PDChange
-' Назначение: Регрессивное тестирование АИ (инцидент 6100013259)
-'             Выгрузка слепка таблицы ZFI_TX04_008_AI через SE16N
-'             (экспорт ALV -> буфер обмена Windows) и проверки по ТЗ:
-'             Блок 1 — качество данных внутри одной версии
-'             Блок 2 — сверка итогов между версиями
-'             Блок 3 — консистентность шагов (при диапазоне шагов)
+' РњРѕРґСѓР»СЊ: m_ZFI_TX04_008_AI
+' Р—Р°РїСѓСЃРє: Public Sub PDChange
+' РќР°Р·РЅР°С‡РµРЅРёРµ: Р РµРіСЂРµСЃСЃРёРІРЅРѕРµ С‚РµСЃС‚РёСЂРѕРІР°РЅРёРµ РђР (РёРЅС†РёРґРµРЅС‚ 6100013259)
+'             Р’С‹РіСЂСѓР·РєР° СЃР»РµРїРєР° С‚Р°Р±Р»РёС†С‹ ZFI_TX04_008_AI С‡РµСЂРµР· SE16N
+'             (СЌРєСЃРїРѕСЂС‚ ALV -> Р±СѓС„РµСЂ РѕР±РјРµРЅР° Windows) Рё РїСЂРѕРІРµСЂРєРё РїРѕ РўР—:
+'             Р‘Р»РѕРє 1 вЂ” РєР°С‡РµСЃС‚РІРѕ РґР°РЅРЅС‹С… РІРЅСѓС‚СЂРё РѕРґРЅРѕР№ РІРµСЂСЃРёРё
+'             Р‘Р»РѕРє 2 вЂ” СЃРІРµСЂРєР° РёС‚РѕРіРѕРІ РјРµР¶РґСѓ РІРµСЂСЃРёСЏРјРё
+'             Р‘Р»РѕРє 3 вЂ” РєРѕРЅСЃРёСЃС‚РµРЅС‚РЅРѕСЃС‚СЊ С€Р°РіРѕРІ (РїСЂРё РґРёР°РїР°Р·РѕРЅРµ С€Р°РіРѕРІ)
 '
-' Зависимости:
+' Р—Р°РІРёСЃРёРјРѕСЃС‚Рё:
 '   - m_sapGui: SAP_Connection, OpenTransaction, SendEnter, SetTextboxValue,
-'     GetStatusBarProperty, IsElementExists (модуль не входит в архив);
-'   - SAP GUI Scripting (поздняя привязка, ссылки в проекте не нужны);
+'     GetStatusBarProperty, IsElementExists (РјРѕРґСѓР»СЊ РЅРµ РІС…РѕРґРёС‚ РІ Р°СЂС…РёРІ);
+'   - SAP GUI Scripting (РїРѕР·РґРЅСЏСЏ РїСЂРёРІСЏР·РєР°, СЃСЃС‹Р»РєРё РІ РїСЂРѕРµРєС‚Рµ РЅРµ РЅСѓР¶РЅС‹);
 '   - Windows API: user32 (ShowWindow, SetForegroundWindow), kernel32 (Sleep,
 '     QueryPerformanceCounter, QueryPerformanceFrequency);
-'   - CreateObject: MSForms.DataObject (буфер обмена Windows), Scripting.Dictionary;
-'   - листы книги: «Итоговый отчет» (параметры B1:C5, результаты проверок),
-'     «ZFI_TX04_008_AI» (данные, пересоздаётся при каждом запуске),
-'     «Технический лист» (замеры, создаётся при отсутствии).
+'   - CreateObject: MSForms.DataObject (Р±СѓС„РµСЂ РѕР±РјРµРЅР° Windows), Scripting.Dictionary;
+'   - Р»РёСЃС‚С‹ РєРЅРёРіРё: В«РС‚РѕРіРѕРІС‹Р№ РѕС‚С‡РµС‚В» (РїР°СЂР°РјРµС‚СЂС‹ B1:C5, СЂРµР·СѓР»СЊС‚Р°С‚С‹ РїСЂРѕРІРµСЂРѕРє),
+'     В«ZFI_TX04_008_AIВ» (РґР°РЅРЅС‹Рµ, РїРµСЂРµСЃРѕР·РґР°С‘С‚СЃСЏ РїСЂРё РєР°Р¶РґРѕРј Р·Р°РїСѓСЃРєРµ),
+'     В«РўРµС…РЅРёС‡РµСЃРєРёР№ Р»РёСЃС‚В» (Р·Р°РјРµСЂС‹, СЃРѕР·РґР°С‘С‚СЃСЏ РїСЂРё РѕС‚СЃСѓС‚СЃС‚РІРёРё).
 '
-' Содержание:
-'   1. Windows API, константы (пути SAP, листы, параметры проверок, заголовки
-'      колонок), структуры, переменные уровня модуля
-'   2. Замеры времени по этапам (QueryPerformanceCounter) и запись замеров
-'      на «Технический лист»: столбцы A:H, строка на этап, история накапливается
-'   3. Сервисные процедуры: состояние Excel, листы, прогресс, очистка
-'   4. Работа с SAP GUI: ожидание, поиск элементов, статус-строка
-'   5. Буфер обмена Windows: очистка и ожидание данных
-'   6. Разбор данных: ключи, числа, даты, строки выгрузки, заголовок
-'   7. Флажок «Документ СПП», ключ группировки, кэш строк
-'   8. Таблица ошибок: шапка, пакетная запись, форматы
-'   9. Проверки: Check1_Quality, Check2_VersionsCompare, Check3_Consistency
-'  10. Параметры запуска, подготовка листов, распознавание колонок, лист данных
-'  11. ExportSe16n, ParseExport — получение и разбор выгрузки
-'  12. PDChange — основная процедура
+' РЎРѕРґРµСЂР¶Р°РЅРёРµ:
+'   1. Windows API, РєРѕРЅСЃС‚Р°РЅС‚С‹ (РїСѓС‚Рё SAP, Р»РёСЃС‚С‹, РїР°СЂР°РјРµС‚СЂС‹ РїСЂРѕРІРµСЂРѕРє, Р·Р°РіРѕР»РѕРІРєРё
+'      РєРѕР»РѕРЅРѕРє), СЃС‚СЂСѓРєС‚СѓСЂС‹, РїРµСЂРµРјРµРЅРЅС‹Рµ СѓСЂРѕРІРЅСЏ РјРѕРґСѓР»СЏ
+'   2. Р—Р°РјРµСЂС‹ РІСЂРµРјРµРЅРё РїРѕ СЌС‚Р°РїР°Рј (QueryPerformanceCounter) Рё Р·Р°РїРёСЃСЊ Р·Р°РјРµСЂРѕРІ
+'      РЅР° В«РўРµС…РЅРёС‡РµСЃРєРёР№ Р»РёСЃС‚В»: СЃС‚РѕР»Р±С†С‹ A:H, СЃС‚СЂРѕРєР° РЅР° СЌС‚Р°Рї, РёСЃС‚РѕСЂРёСЏ РЅР°РєР°РїР»РёРІР°РµС‚СЃСЏ
+'   3. РЎРµСЂРІРёСЃРЅС‹Рµ РїСЂРѕС†РµРґСѓСЂС‹: СЃРѕСЃС‚РѕСЏРЅРёРµ Excel, Р»РёСЃС‚С‹, РїСЂРѕРіСЂРµСЃСЃ, РѕС‡РёСЃС‚РєР°
+'   4. Р Р°Р±РѕС‚Р° СЃ SAP GUI: РѕР¶РёРґР°РЅРёРµ, РїРѕРёСЃРє СЌР»РµРјРµРЅС‚РѕРІ, СЃС‚Р°С‚СѓСЃ-СЃС‚СЂРѕРєР°
+'   5. Р‘СѓС„РµСЂ РѕР±РјРµРЅР° Windows: РѕС‡РёСЃС‚РєР° Рё РѕР¶РёРґР°РЅРёРµ РґР°РЅРЅС‹С…
+'   6. Р Р°Р·Р±РѕСЂ РґР°РЅРЅС‹С…: РєР»СЋС‡Рё, С‡РёСЃР»Р°, РґР°С‚С‹, СЃС‚СЂРѕРєРё РІС‹РіСЂСѓР·РєРё, Р·Р°РіРѕР»РѕРІРѕРє
+'   7. Р¤Р»Р°Р¶РѕРє В«Р”РѕРєСѓРјРµРЅС‚ РЎРџРџВ», РєР»СЋС‡ РіСЂСѓРїРїРёСЂРѕРІРєРё, РєСЌС€ СЃС‚СЂРѕРє
+'   8. РўР°Р±Р»РёС†Р° РѕС€РёР±РѕРє: С€Р°РїРєР°, РїР°РєРµС‚РЅР°СЏ Р·Р°РїРёСЃСЊ, С„РѕСЂРјР°С‚С‹
+'   9. РџСЂРѕРІРµСЂРєРё: Check1_Quality, Check2_VersionsCompare, Check3_Consistency
+'  10. РџР°СЂР°РјРµС‚СЂС‹ Р·Р°РїСѓСЃРєР°, РїРѕРґРіРѕС‚РѕРІРєР° Р»РёСЃС‚РѕРІ, СЂР°СЃРїРѕР·РЅР°РІР°РЅРёРµ РєРѕР»РѕРЅРѕРє, Р»РёСЃС‚ РґР°РЅРЅС‹С…
+'  11. ExportSe16n, ParseExport вЂ” РїРѕР»СѓС‡РµРЅРёРµ Рё СЂР°Р·Р±РѕСЂ РІС‹РіСЂСѓР·РєРё
+'  12. PDChange вЂ” РѕСЃРЅРѕРІРЅР°СЏ РїСЂРѕС†РµРґСѓСЂР°
 '
-' Алгоритм PDChange:
-'   1. Чтение параметров с листа «Итоговый отчет» (B1:C5) и флажка «Документ СПП».
-'   2. Подключение к SAP (SAP_Connection), очистка отчёта, пересоздание листа данных.
-'   3. SE16N: таблица, вариант просмотра, условия выборки (год, период, версии,
-'      шаги), выполнение выборки.
-'   4. Экспорт ALV в буфер обмена и ожидание данных (таймаут CLIP_WAIT_SEC —
-'      300 сек; размер данных должен перестать расти).
-'   5. Разбор текста в массив, распознавание колонок, кэш ключей строк.
-'   6. Запись данных на лист «ZFI_TX04_008_AI».
-'   7. Проверки: Блок 1 — по каждой версии, Блок 2 — между версиями, Блок 3 —
-'      по каждой версии при диапазоне шагов.
-'   8. Вывод таблицы ошибок на «Итоговый отчет», запись замеров на
-'      «Технический лист».
+' РђР»РіРѕСЂРёС‚Рј PDChange:
+'   1. Р§С‚РµРЅРёРµ РїР°СЂР°РјРµС‚СЂРѕРІ СЃ Р»РёСЃС‚Р° В«РС‚РѕРіРѕРІС‹Р№ РѕС‚С‡РµС‚В» (B1:C5) Рё С„Р»Р°Р¶РєР° В«Р”РѕРєСѓРјРµРЅС‚ РЎРџРџВ».
+'   2. РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє SAP (SAP_Connection), РѕС‡РёСЃС‚РєР° РѕС‚С‡С‘С‚Р°, РїРµСЂРµСЃРѕР·РґР°РЅРёРµ Р»РёСЃС‚Р° РґР°РЅРЅС‹С….
+'   3. SE16N: С‚Р°Р±Р»РёС†Р°, РІР°СЂРёР°РЅС‚ РїСЂРѕСЃРјРѕС‚СЂР°, СѓСЃР»РѕРІРёСЏ РІС‹Р±РѕСЂРєРё (РіРѕРґ, РїРµСЂРёРѕРґ, РІРµСЂСЃРёРё,
+'      С€Р°РіРё), РІС‹РїРѕР»РЅРµРЅРёРµ РІС‹Р±РѕСЂРєРё.
+'   4. Р­РєСЃРїРѕСЂС‚ ALV РІ Р±СѓС„РµСЂ РѕР±РјРµРЅР° Рё РѕР¶РёРґР°РЅРёРµ РґР°РЅРЅС‹С… (С‚Р°Р№РјР°СѓС‚ CLIP_WAIT_SEC вЂ”
+'      300 СЃРµРє; СЂР°Р·РјРµСЂ РґР°РЅРЅС‹С… РґРѕР»Р¶РµРЅ РїРµСЂРµСЃС‚Р°С‚СЊ СЂР°СЃС‚Рё).
+'   5. Р Р°Р·Р±РѕСЂ С‚РµРєСЃС‚Р° РІ РјР°СЃСЃРёРІ, СЂР°СЃРїРѕР·РЅР°РІР°РЅРёРµ РєРѕР»РѕРЅРѕРє, РєСЌС€ РєР»СЋС‡РµР№ СЃС‚СЂРѕРє.
+'   6. Р—Р°РїРёСЃСЊ РґР°РЅРЅС‹С… РЅР° Р»РёСЃС‚ В«ZFI_TX04_008_AIВ».
+'   7. РџСЂРѕРІРµСЂРєРё: Р‘Р»РѕРє 1 вЂ” РїРѕ РєР°Р¶РґРѕР№ РІРµСЂСЃРёРё, Р‘Р»РѕРє 2 вЂ” РјРµР¶РґСѓ РІРµСЂСЃРёСЏРјРё, Р‘Р»РѕРє 3 вЂ”
+'      РїРѕ РєР°Р¶РґРѕР№ РІРµСЂСЃРёРё РїСЂРё РґРёР°РїР°Р·РѕРЅРµ С€Р°РіРѕРІ.
+'   8. Р’С‹РІРѕРґ С‚Р°Р±Р»РёС†С‹ РѕС€РёР±РѕРє РЅР° В«РС‚РѕРіРѕРІС‹Р№ РѕС‚С‡РµС‚В», Р·Р°РїРёСЃСЊ Р·Р°РјРµСЂРѕРІ РЅР°
+'      В«РўРµС…РЅРёС‡РµСЃРєРёР№ Р»РёСЃС‚В».
 ' ========================================================================
 Option Explicit
 ' ============================================================================
@@ -72,7 +72,7 @@ Private Declare Function QueryPerformanceCounter Lib "kernel32" (ByRef lpPerform
 Private Declare Function QueryPerformanceFrequency Lib "kernel32" (ByRef lpFrequency As Currency) As Long
 #End If
 ' ============================================================================
-' Константы путей к элементам SAP (SE16N, таблица ZFI_TX04_008_AI)
+' РљРѕРЅСЃС‚Р°РЅС‚С‹ РїСѓС‚РµР№ Рє СЌР»РµРјРµРЅС‚Р°Рј SAP (SE16N, С‚Р°Р±Р»РёС†Р° ZFI_TX04_008_AI)
 ' ============================================================================
 Private Const SAP_TABLE_NAME        As String = "ZFI_TX04_008_AI"
 Private Const SAP_SE16N_TABLE       As String = "wnd[0]/usr/ctxtGD-TAB"
@@ -80,7 +80,7 @@ Private Const SAP_SE16N_VARIANT     As String = "wnd[0]/usr/ctxtGD-VARIANT"
 Private Const SAP_SE16N_MAXLINES    As String = "wnd[0]/usr/txtGD-MAX_LINES"
 Private Const SAP_SE16N_EXECUTE_BTN As String = "wnd[0]/tbar[1]/btn[8]"
 Private Const SAP_SE16N_GRID        As String = "wnd[0]/usr/cntlRESULT_LIST/shellcont/shell"
-' Индексы строк таблицы полей [2,N] зависят от состава полей варианта /REGRESSIVE
+' РРЅРґРµРєСЃС‹ СЃС‚СЂРѕРє С‚Р°Р±Р»РёС†С‹ РїРѕР»РµР№ [2,N] Р·Р°РІРёСЃСЏС‚ РѕС‚ СЃРѕСЃС‚Р°РІР° РїРѕР»РµР№ РІР°СЂРёР°РЅС‚Р° /REGRESSIVE
 Private Const SAP_SE16N_FLD_GJAHR   As String = "wnd[0]/usr/tblSAPLSE16NSELFIELDS_TC/ctxtGS_SELFIELDS-LOW[2,2]"
 Private Const SAP_SE16N_FLD_MONAT   As String = "wnd[0]/usr/tblSAPLSE16NSELFIELDS_TC/ctxtGS_SELFIELDS-LOW[2,3]"
 Private Const SAP_SE16N_FLD_VERS    As String = "wnd[0]/usr/tblSAPLSE16NSELFIELDS_TC/ctxtGS_SELFIELDS-LOW[2,4]"
@@ -94,73 +94,73 @@ Private Const SAP_SE16N_MULTI_OK    As String = "wnd[1]/tbar[0]/btn[8]"
 Private Const SAP_EXPORT_DLG_FLAG   As String = "wnd[1]/usr/subSUBSCREEN_STEPLOOP:SAPLSPO5:0150/sub:SAPLSPO5:0150/radSPOPLI-SELFLAG[4,0]"
 Private Const SAP_EXPORT_DLG_OK     As String = "wnd[1]/tbar[0]/btn[0]"
 ' ============================================================================
-' Тайминги и режимы
+' РўР°Р№РјРёРЅРіРё Рё СЂРµР¶РёРјС‹
 ' ============================================================================
-Private Const CLIP_WAIT_SEC         As Double = 300     ' Таймаут ожидания буфера обмена, сек
-Private Const SAP_BUSY_TIMEOUT_SEC  As Double = 600     ' Таймаут «сессия SAP занята»
-Private Const ERR_BATCH_ROWS        As Long = 2000      ' Размер пакета записи таблицы ошибок
-Private Const ERR_CUSTOM            As Long = vbObjectError + 513  ' Контролируемая ошибка (без кода в сообщении)
+Private Const CLIP_WAIT_SEC         As Double = 300     ' РўР°Р№РјР°СѓС‚ РѕР¶РёРґР°РЅРёСЏ Р±СѓС„РµСЂР° РѕР±РјРµРЅР°, СЃРµРє
+Private Const SAP_BUSY_TIMEOUT_SEC  As Double = 600     ' РўР°Р№РјР°СѓС‚ В«СЃРµСЃСЃРёСЏ SAP Р·Р°РЅСЏС‚Р°В»
+Private Const ERR_BATCH_ROWS        As Long = 2000      ' Р Р°Р·РјРµСЂ РїР°РєРµС‚Р° Р·Р°РїРёСЃРё С‚Р°Р±Р»РёС†С‹ РѕС€РёР±РѕРє
+Private Const ERR_CUSTOM            As Long = vbObjectError + 513  ' РљРѕРЅС‚СЂРѕР»РёСЂСѓРµРјР°СЏ РѕС€РёР±РєР° (Р±РµР· РєРѕРґР° РІ СЃРѕРѕР±С‰РµРЅРёРё)
 ' ============================================================================
-' Имена листов Excel
+' РРјРµРЅР° Р»РёСЃС‚РѕРІ Excel
 ' ============================================================================
-Private Const SHEET_REPORT       As String = "Итоговый отчет"
+Private Const SHEET_REPORT       As String = "РС‚РѕРіРѕРІС‹Р№ РѕС‚С‡РµС‚"
 Private Const SHEET_DATA         As String = "ZFI_TX04_008_AI"
-Private Const SHEET_TECH         As String = "Технический лист"
+Private Const SHEET_TECH         As String = "РўРµС…РЅРёС‡РµСЃРєРёР№ Р»РёСЃС‚"
 ' ============================================================================
-' Ячейки параметров на листе «Итоговый отчет» (столбцы B и C)
+' РЇС‡РµР№РєРё РїР°СЂР°РјРµС‚СЂРѕРІ РЅР° Р»РёСЃС‚Рµ В«РС‚РѕРіРѕРІС‹Р№ РѕС‚С‡РµС‚В» (СЃС‚РѕР»Р±С†С‹ B Рё C)
 ' ============================================================================
-Private Const P_ROW_VARIANT      As Long = 1   ' B1 — Вар. просмотра (REGRESSIVE)
-Private Const P_ROW_GJAHR        As Long = 2   ' B2 — Финансовый год GJAHR
-Private Const P_ROW_MONAT        As Long = 3   ' B3 — Период MONAT
-Private Const P_ROW_VERS         As Long = 4   ' B4 — Версия (обязат.), C4 — Версия 2
-Private Const P_ROW_STEP         As Long = 5   ' B5 — Шаг «с» (обязат.), C5 — «по»
-Private Const RES_ROW_FIRST      As Long = 7   ' Первая строка результатов проверок
+Private Const P_ROW_VARIANT      As Long = 1   ' B1 вЂ” Р’Р°СЂ. РїСЂРѕСЃРјРѕС‚СЂР° (REGRESSIVE)
+Private Const P_ROW_GJAHR        As Long = 2   ' B2 вЂ” Р¤РёРЅР°РЅСЃРѕРІС‹Р№ РіРѕРґ GJAHR
+Private Const P_ROW_MONAT        As Long = 3   ' B3 вЂ” РџРµСЂРёРѕРґ MONAT
+Private Const P_ROW_VERS         As Long = 4   ' B4 вЂ” Р’РµСЂСЃРёСЏ (РѕР±СЏР·Р°С‚.), C4 вЂ” Р’РµСЂСЃРёСЏ 2
+Private Const P_ROW_STEP         As Long = 5   ' B5 вЂ” РЁР°Рі В«СЃВ» (РѕР±СЏР·Р°С‚.), C5 вЂ” В«РїРѕВ»
+Private Const RES_ROW_FIRST      As Long = 7   ' РџРµСЂРІР°СЏ СЃС‚СЂРѕРєР° СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РїСЂРѕРІРµСЂРѕРє
 ' ============================================================================
-' Параметры проверок (ТЗ)
+' РџР°СЂР°РјРµС‚СЂС‹ РїСЂРѕРІРµСЂРѕРє (РўР—)
 ' ============================================================================
-Private Const ERR_TXT_SUM        As String = "Ошибка в этой версии – принимаем в НДД больше, чем было затрат (столбец M > столбец N)"
-Private Const ERR_TXT_DATE_PAST  As String = "Ошибка в этой версии – платеж до режима НДД"
-Private Const ERR_TXT_DATE_FUT   As String = "Ошибка в этой версии – платеж будущего периода"
-Private Const ERR_TXT_VER_M      As String = "Ошибка сравнения версий – разная сумма для НДД (столбец M)"
-Private Const ERR_TXT_VER_N      As String = "Ошибка сравнения версий – разная сумма затрат (столбец N)"
-Private Const ERR_TXT_CONSIST    As String = "Ошибка консистентности – ошибка в шагах расчета"
-Private Const ERR_TXT_DOC_O      As String = "Ошибка в этой версии – для документов никогда не найдутся документы дальше"
-Private Const STEP_DOC_O         As String = "4"           ' Блок 1, п.4: проверка на 4-м шаге (ТЗ)
-Private Const TOL                As Double = 0.01          ' Допуск сравнения сумм
-Private Const MAX_ERR_LINES      As Long = 10000           ' Ограничение строк ошибок на блок
-Private Const ERR_COLS           As Long = 10              ' Колонок в таблице ошибок (A:J)
-Private Const ERR_COLS_MAX       As Long = 12              ' Очистка — по макс. ширине прошлых версий
-' --- Заголовки колонок выгрузки (распознавание по началу текста) ---
-Private Const HDR_SPP            As String = "СПП-элем"
-Private Const HDR_SUM_NDD        As String = "Сумма расх"
-Private Const HDR_SUM_BE         As String = "Сумма в ва"
-Private Const HDR_DATE_PAY       As String = "Дата плат"
-Private Const HDR_KEY_BUKRS      As String = "БЕ"
-Private Const HDR_KEY_GJAHR      As String = "Финансовый год"
-Private Const HDR_KEY_MONAT      As String = "Период проводки"
-Private Const HDR_KEY_VERS       As String = "Версия"
-Private Const HDR_KEY_BELNR      As String = "Документ СПП"
-Private Const HDR_KEY_DOCLN      As String = "Строка проводки"
-Private Const HDR_DOC_SF         As String = "Документ ф"
-Private Const HDR_DOC_O          As String = "Документ О"
+Private Const ERR_TXT_SUM        As String = "РћС€РёР±РєР° РІ СЌС‚РѕР№ РІРµСЂСЃРёРё вЂ“ РїСЂРёРЅРёРјР°РµРј РІ РќР”Р” Р±РѕР»СЊС€Рµ, С‡РµРј Р±С‹Р»Рѕ Р·Р°С‚СЂР°С‚ (СЃС‚РѕР»Р±РµС† M > СЃС‚РѕР»Р±РµС† N)"
+Private Const ERR_TXT_DATE_PAST  As String = "РћС€РёР±РєР° РІ СЌС‚РѕР№ РІРµСЂСЃРёРё вЂ“ РїР»Р°С‚РµР¶ РґРѕ СЂРµР¶РёРјР° РќР”Р”"
+Private Const ERR_TXT_DATE_FUT   As String = "РћС€РёР±РєР° РІ СЌС‚РѕР№ РІРµСЂСЃРёРё вЂ“ РїР»Р°С‚РµР¶ Р±СѓРґСѓС‰РµРіРѕ РїРµСЂРёРѕРґР°"
+Private Const ERR_TXT_VER_M      As String = "РћС€РёР±РєР° СЃСЂР°РІРЅРµРЅРёСЏ РІРµСЂСЃРёР№ вЂ“ СЂР°Р·РЅР°СЏ СЃСѓРјРјР° РґР»СЏ РќР”Р” (СЃС‚РѕР»Р±РµС† M)"
+Private Const ERR_TXT_VER_N      As String = "РћС€РёР±РєР° СЃСЂР°РІРЅРµРЅРёСЏ РІРµСЂСЃРёР№ вЂ“ СЂР°Р·РЅР°СЏ СЃСѓРјРјР° Р·Р°С‚СЂР°С‚ (СЃС‚РѕР»Р±РµС† N)"
+Private Const ERR_TXT_CONSIST    As String = "РћС€РёР±РєР° РєРѕРЅСЃРёСЃС‚РµРЅС‚РЅРѕСЃС‚Рё вЂ“ РѕС€РёР±РєР° РІ С€Р°РіР°С… СЂР°СЃС‡РµС‚Р°"
+Private Const ERR_TXT_DOC_O      As String = "РћС€РёР±РєР° РІ СЌС‚РѕР№ РІРµСЂСЃРёРё вЂ“ РґР»СЏ РґРѕРєСѓРјРµРЅС‚РѕРІ РЅРёРєРѕРіРґР° РЅРµ РЅР°Р№РґСѓС‚СЃСЏ РґРѕРєСѓРјРµРЅС‚С‹ РґР°Р»СЊС€Рµ"
+Private Const STEP_DOC_O         As String = "4"           ' Р‘Р»РѕРє 1, Рї.4: РїСЂРѕРІРµСЂРєР° РЅР° 4-Рј С€Р°РіРµ (РўР—)
+Private Const TOL                As Double = 0.01          ' Р”РѕРїСѓСЃРє СЃСЂР°РІРЅРµРЅРёСЏ СЃСѓРјРј
+Private Const MAX_ERR_LINES      As Long = 10000           ' РћРіСЂР°РЅРёС‡РµРЅРёРµ СЃС‚СЂРѕРє РѕС€РёР±РѕРє РЅР° Р±Р»РѕРє
+Private Const ERR_COLS           As Long = 10              ' РљРѕР»РѕРЅРѕРє РІ С‚Р°Р±Р»РёС†Рµ РѕС€РёР±РѕРє (A:J)
+Private Const ERR_COLS_MAX       As Long = 12              ' РћС‡РёСЃС‚РєР° вЂ” РїРѕ РјР°РєСЃ. С€РёСЂРёРЅРµ РїСЂРѕС€Р»С‹С… РІРµСЂСЃРёР№
+' --- Р—Р°РіРѕР»РѕРІРєРё РєРѕР»РѕРЅРѕРє РІС‹РіСЂСѓР·РєРё (СЂР°СЃРїРѕР·РЅР°РІР°РЅРёРµ РїРѕ РЅР°С‡Р°Р»Сѓ С‚РµРєСЃС‚Р°) ---
+Private Const HDR_SPP            As String = "РЎРџРџ-СЌР»РµРј"
+Private Const HDR_SUM_NDD        As String = "РЎСѓРјРјР° СЂР°СЃС…"
+Private Const HDR_SUM_BE         As String = "РЎСѓРјРјР° РІ РІР°"
+Private Const HDR_DATE_PAY       As String = "Р”Р°С‚Р° РїР»Р°С‚"
+Private Const HDR_KEY_BUKRS      As String = "Р‘Р•"
+Private Const HDR_KEY_GJAHR      As String = "Р¤РёРЅР°РЅСЃРѕРІС‹Р№ РіРѕРґ"
+Private Const HDR_KEY_MONAT      As String = "РџРµСЂРёРѕРґ РїСЂРѕРІРѕРґРєРё"
+Private Const HDR_KEY_VERS       As String = "Р’РµСЂСЃРёСЏ"
+Private Const HDR_KEY_BELNR      As String = "Р”РѕРєСѓРјРµРЅС‚ РЎРџРџ"
+Private Const HDR_KEY_DOCLN      As String = "РЎС‚СЂРѕРєР° РїСЂРѕРІРѕРґРєРё"
+Private Const HDR_DOC_SF         As String = "Р”РѕРєСѓРјРµРЅС‚ С„"
+Private Const HDR_DOC_O          As String = "Р”РѕРєСѓРјРµРЅС‚ Рћ"
 Private Const HDR_KEY_STEP       As String = "STEP"
 ' ============================================================================
-' Структуры
+' РЎС‚СЂСѓРєС‚СѓСЂС‹
 ' ============================================================================
 Private Type TRunParams
     VariantName As String       ' B1
     Gjahr       As String       ' B2
     Monat       As String       ' B3
     Vers1       As String       ' B4
-    Vers2       As String       ' C4 (необязательная)
+    Vers2       As String       ' C4 (РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅР°СЏ)
     Step1       As String       ' B5
-    Step2       As String       ' C5 (необязательная)
-    arrVers     As Variant      ' список версий (1 или 2)
-    arrSteps    As Variant      ' список шагов (1 значение или диапазон)
+    Step2       As String       ' C5 (РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅР°СЏ)
+    arrVers     As Variant      ' СЃРїРёСЃРѕРє РІРµСЂСЃРёР№ (1 РёР»Рё 2)
+    arrSteps    As Variant      ' СЃРїРёСЃРѕРє С€Р°РіРѕРІ (1 Р·РЅР°С‡РµРЅРёРµ РёР»Рё РґРёР°РїР°Р·РѕРЅ)
     VersLabel   As String
     StepsLabel  As String
 End Type
-Private Type TCols               ' индексы колонок выгрузки (0 — не найдена)
+Private Type TCols               ' РёРЅРґРµРєСЃС‹ РєРѕР»РѕРЅРѕРє РІС‹РіСЂСѓР·РєРё (0 вЂ” РЅРµ РЅР°Р№РґРµРЅР°)
     spp     As Long
     sumNDD  As Long
     sumBE   As Long
@@ -174,83 +174,83 @@ Private Type TCols               ' индексы колонок выгрузки (0 — не найдена)
     docln   As Long
 End Type
 ' ============================================================================
-' Переменные уровня модуля
+' РџРµСЂРµРјРµРЅРЅС‹Рµ СѓСЂРѕРІРЅСЏ РјРѕРґСѓР»СЏ
 ' ============================================================================
-Private m_startTime  As Double   ' Начало выполнения макроса
-Private m_stage      As String   ' Последний этап (показывается в сообщении об ошибке)
+Private m_startTime  As Double   ' РќР°С‡Р°Р»Рѕ РІС‹РїРѕР»РЅРµРЅРёСЏ РјР°РєСЂРѕСЃР°
+Private m_stage      As String   ' РџРѕСЃР»РµРґРЅРёР№ СЌС‚Р°Рї (РїРѕРєР°Р·С‹РІР°РµС‚СЃСЏ РІ СЃРѕРѕР±С‰РµРЅРёРё РѕР± РѕС€РёР±РєРµ)
 Private m_wsReport   As Worksheet
 Private m_wsData     As Worksheet
 Private m_wsTech     As Worksheet
-Private m_hdrWritten As Boolean  ' Шапка таблицы ошибок выведена
-Private m_hdrRow     As Long     ' Строка шапки таблицы ошибок
-Private m_docSPPOn   As Boolean  ' Флажок «Документ СПП» включён
+Private m_hdrWritten As Boolean  ' РЁР°РїРєР° С‚Р°Р±Р»РёС†С‹ РѕС€РёР±РѕРє РІС‹РІРµРґРµРЅР°
+Private m_hdrRow     As Long     ' РЎС‚СЂРѕРєР° С€Р°РїРєРё С‚Р°Р±Р»РёС†С‹ РѕС€РёР±РѕРє
+Private m_docSPPOn   As Boolean  ' Р¤Р»Р°Р¶РѕРє В«Р”РѕРєСѓРјРµРЅС‚ РЎРџРџВ» РІРєР»СЋС‡С‘РЅ
 Private m_idxDocSPP  As Long
 Private m_idxDocLN   As Long
 Private m_idxDocSF   As Long
 Private m_idxDocO    As Long
-Private m_dtThreshold As Date    ' 01.01.2025 (Блок 1, п.2)
-' --- Сохранённое состояние Excel ---
+Private m_dtThreshold As Date    ' 01.01.2025 (Р‘Р»РѕРє 1, Рї.2)
+' --- РЎРѕС…СЂР°РЅС‘РЅРЅРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ Excel ---
 Private m_stateSaved      As Boolean
 Private m_prevCalc        As Long
 Private m_prevScreen      As Boolean
 Private m_prevEvents      As Boolean
 Private m_prevInteractive As Boolean
-' --- Кэш строк (строится один раз, проверки читают только его) ---
+' --- РљСЌС€ СЃС‚СЂРѕРє (СЃС‚СЂРѕРёС‚СЃСЏ РѕРґРёРЅ СЂР°Р·, РїСЂРѕРІРµСЂРєРё С‡РёС‚Р°СЋС‚ С‚РѕР»СЊРєРѕ РµРіРѕ) ---
 Private m_nRows        As Long
-Private m_arrVer()     As String   ' Нормализованная версия строки
-Private m_arrStep()    As String   ' Нормализованный шаг строки
-Private m_arrStepIdx() As Long     ' Индекс шага в arrSteps (-1 — вне диапазона)
-Private m_arrGrp()     As Long     ' Номер группы (СПП / сцепка документа), 0 — пустой ключ
-Private m_arrDt()      As Date     ' Дата оплаты
-Private m_arrDtOk()    As Boolean  ' Дата распознана
-Private m_arrSumM()    As Double   ' «Сумма расходов для НДД» (M)
-Private m_arrSumN()    As Double   ' «Сумма в валюте БЕ» (N)
+Private m_arrVer()     As String   ' РќРѕСЂРјР°Р»РёР·РѕРІР°РЅРЅР°СЏ РІРµСЂСЃРёСЏ СЃС‚СЂРѕРєРё
+Private m_arrStep()    As String   ' РќРѕСЂРјР°Р»РёР·РѕРІР°РЅРЅС‹Р№ С€Р°Рі СЃС‚СЂРѕРєРё
+Private m_arrStepIdx() As Long     ' РРЅРґРµРєСЃ С€Р°РіР° РІ arrSteps (-1 вЂ” РІРЅРµ РґРёР°РїР°Р·РѕРЅР°)
+Private m_arrGrp()     As Long     ' РќРѕРјРµСЂ РіСЂСѓРїРїС‹ (РЎРџРџ / СЃС†РµРїРєР° РґРѕРєСѓРјРµРЅС‚Р°), 0 вЂ” РїСѓСЃС‚РѕР№ РєР»СЋС‡
+Private m_arrDt()      As Date     ' Р”Р°С‚Р° РѕРїР»Р°С‚С‹
+Private m_arrDtOk()    As Boolean  ' Р”Р°С‚Р° СЂР°СЃРїРѕР·РЅР°РЅР°
+Private m_arrSumM()    As Double   ' В«РЎСѓРјРјР° СЂР°СЃС…РѕРґРѕРІ РґР»СЏ РќР”Р”В» (M)
+Private m_arrSumN()    As Double   ' В«РЎСѓРјРјР° РІ РІР°Р»СЋС‚Рµ Р‘Р•В» (N)
 Private m_arrDocOEmpty()  As Boolean
 Private m_arrDocSFEmpty() As Boolean
-Private m_nGrp         As Long     ' Число групп
-Private m_grpNames     As Variant  ' Имена групп: m_grpNames(g - 1)
+Private m_nGrp         As Long     ' Р§РёСЃР»Рѕ РіСЂСѓРїРї
+Private m_grpNames     As Variant  ' РРјРµРЅР° РіСЂСѓРїРї: m_grpNames(g - 1)
 Private m_dictGrp      As Object
-' --- Пакет записи таблицы ошибок ---
+' --- РџР°РєРµС‚ Р·Р°РїРёСЃРё С‚Р°Р±Р»РёС†С‹ РѕС€РёР±РѕРє ---
 Private m_eb()         As Variant  ' (1 To ERR_BATCH_ROWS, 1 To ERR_COLS)
-Private m_ebLink()     As Variant  ' (1 To ERR_BATCH_ROWS, 1 To 1) формулы дриллдауна
-Private m_ebKind()     As Byte     ' 1 — в строке даты, 0 — числа
+Private m_ebLink()     As Variant  ' (1 To ERR_BATCH_ROWS, 1 To 1) С„РѕСЂРјСѓР»С‹ РґСЂРёР»Р»РґР°СѓРЅР°
+Private m_ebKind()     As Byte     ' 1 вЂ” РІ СЃС‚СЂРѕРєРµ РґР°С‚С‹, 0 вЂ” С‡РёСЃР»Р°
 Private m_ebN          As Long
 Private m_ebFirstRow   As Long
 ' ============================================================================
-' Замеры времени по этапам: константы и переменные
+' Р—Р°РјРµСЂС‹ РІСЂРµРјРµРЅРё РїРѕ СЌС‚Р°РїР°Рј: РєРѕРЅСЃС‚Р°РЅС‚С‹ Рё РїРµСЂРµРјРµРЅРЅС‹Рµ
 ' ============================================================================
-Private Const ST_CONNECT As Long = 1    ' Подключение к SAP
-Private Const ST_PREP    As Long = 2    ' Подготовка листов
-Private Const ST_SE16N   As Long = 3    ' SE16N: условия выборки и запуск
-Private Const ST_EXPORT  As Long = 4    ' Ожидание/формирование экспорта
-Private Const ST_GET     As Long = 5    ' Получение данных
-Private Const ST_PARSE   As Long = 6    ' Разбор в массив
-Private Const ST_CACHE   As Long = 7    ' Кэш ключей строк
-Private Const ST_WRITE   As Long = 8    ' Запись на лист данных
-Private Const ST_B1      As Long = 9    ' Блок 1
-Private Const ST_B2      As Long = 10   ' Блок 2
-Private Const ST_B3      As Long = 11   ' Блок 3
-Private Const ST_REPORT  As Long = 12   ' Вывод отчёта
-Private Const ST_TOTAL   As Long = 13   ' Итого
+Private Const ST_CONNECT As Long = 1    ' РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє SAP
+Private Const ST_PREP    As Long = 2    ' РџРѕРґРіРѕС‚РѕРІРєР° Р»РёСЃС‚РѕРІ
+Private Const ST_SE16N   As Long = 3    ' SE16N: СѓСЃР»РѕРІРёСЏ РІС‹Р±РѕСЂРєРё Рё Р·Р°РїСѓСЃРє
+Private Const ST_EXPORT  As Long = 4    ' РћР¶РёРґР°РЅРёРµ/С„РѕСЂРјРёСЂРѕРІР°РЅРёРµ СЌРєСЃРїРѕСЂС‚Р°
+Private Const ST_GET     As Long = 5    ' РџРѕР»СѓС‡РµРЅРёРµ РґР°РЅРЅС‹С…
+Private Const ST_PARSE   As Long = 6    ' Р Р°Р·Р±РѕСЂ РІ РјР°СЃСЃРёРІ
+Private Const ST_CACHE   As Long = 7    ' РљСЌС€ РєР»СЋС‡РµР№ СЃС‚СЂРѕРє
+Private Const ST_WRITE   As Long = 8    ' Р—Р°РїРёСЃСЊ РЅР° Р»РёСЃС‚ РґР°РЅРЅС‹С…
+Private Const ST_B1      As Long = 9    ' Р‘Р»РѕРє 1
+Private Const ST_B2      As Long = 10   ' Р‘Р»РѕРє 2
+Private Const ST_B3      As Long = 11   ' Р‘Р»РѕРє 3
+Private Const ST_REPORT  As Long = 12   ' Р’С‹РІРѕРґ РѕС‚С‡С‘С‚Р°
+Private Const ST_TOTAL   As Long = 13   ' РС‚РѕРіРѕ
 Private Const ST_COUNT   As Long = 13
-Private Const TM_COL     As Long = 1    ' Колонка A технического листа: таблица этапов
-Private Const TM_COLS    As Long = 8    ' Число колонок таблицы этапов (A:H)
-Private m_qpcFreq     As Double         ' Частота QueryPerformanceCounter (0 — не опрошена, -1 — недоступна)
-Private m_startClock  As Date           ' Время запуска (для таблицы)
-Private m_stT0(1 To 13)    As Double    ' Старт текущего интервала этапа
-Private m_stDur(1 To 13)   As Double    ' Накопленная длительность этапа, сек
-Private m_stClock(1 To 13) As Date      ' Время первого старта этапа
-Private m_stOpen(1 To 13)  As Boolean   ' Интервал открыт
-Private m_stUsed(1 To 13)  As Boolean   ' Этап запускался
-Private m_flushInBlock     As Double    ' Время записи пакета ошибок внутри текущего блока проверок
-Private m_flushBlocksTotal As Double    ' То же за все блоки (переносится в «Вывод отчёта»)
-Private m_runRows          As Long      ' Строк в выгрузке (для таблицы замеров)
+Private Const TM_COL     As Long = 1    ' РљРѕР»РѕРЅРєР° A С‚РµС…РЅРёС‡РµСЃРєРѕРіРѕ Р»РёСЃС‚Р°: С‚Р°Р±Р»РёС†Р° СЌС‚Р°РїРѕРІ
+Private Const TM_COLS    As Long = 8    ' Р§РёСЃР»Рѕ РєРѕР»РѕРЅРѕРє С‚Р°Р±Р»РёС†С‹ СЌС‚Р°РїРѕРІ (A:H)
+Private m_qpcFreq     As Double         ' Р§Р°СЃС‚РѕС‚Р° QueryPerformanceCounter (0 вЂ” РЅРµ РѕРїСЂРѕС€РµРЅР°, -1 вЂ” РЅРµРґРѕСЃС‚СѓРїРЅР°)
+Private m_startClock  As Date           ' Р’СЂРµРјСЏ Р·Р°РїСѓСЃРєР° (РґР»СЏ С‚Р°Р±Р»РёС†С‹)
+Private m_stT0(1 To 13)    As Double    ' РЎС‚Р°СЂС‚ С‚РµРєСѓС‰РµРіРѕ РёРЅС‚РµСЂРІР°Р»Р° СЌС‚Р°РїР°
+Private m_stDur(1 To 13)   As Double    ' РќР°РєРѕРїР»РµРЅРЅР°СЏ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ СЌС‚Р°РїР°, СЃРµРє
+Private m_stClock(1 To 13) As Date      ' Р’СЂРµРјСЏ РїРµСЂРІРѕРіРѕ СЃС‚Р°СЂС‚Р° СЌС‚Р°РїР°
+Private m_stOpen(1 To 13)  As Boolean   ' РРЅС‚РµСЂРІР°Р» РѕС‚РєСЂС‹С‚
+Private m_stUsed(1 To 13)  As Boolean   ' Р­С‚Р°Рї Р·Р°РїСѓСЃРєР°Р»СЃСЏ
+Private m_flushInBlock     As Double    ' Р’СЂРµРјСЏ Р·Р°РїРёСЃРё РїР°РєРµС‚Р° РѕС€РёР±РѕРє РІРЅСѓС‚СЂРё С‚РµРєСѓС‰РµРіРѕ Р±Р»РѕРєР° РїСЂРѕРІРµСЂРѕРє
+Private m_flushBlocksTotal As Double    ' РўРѕ Р¶Рµ Р·Р° РІСЃРµ Р±Р»РѕРєРё (РїРµСЂРµРЅРѕСЃРёС‚СЃСЏ РІ В«Р’С‹РІРѕРґ РѕС‚С‡С‘С‚Р°В»)
+Private m_runRows          As Long      ' РЎС‚СЂРѕРє РІ РІС‹РіСЂСѓР·РєРµ (РґР»СЏ С‚Р°Р±Р»РёС†С‹ Р·Р°РјРµСЂРѕРІ)
 ' ============================================================================
-' Сервисные процедуры
+' РЎРµСЂРІРёСЃРЅС‹Рµ РїСЂРѕС†РµРґСѓСЂС‹
 ' ============================================================================
 ' ============================================================================
-' Замеры времени: QueryPerformanceCounter (монотонный, без перехода через полночь);
-' если недоступен — Timer с защитой от обнуления в ElapsedSec
+' Р—Р°РјРµСЂС‹ РІСЂРµРјРµРЅРё: QueryPerformanceCounter (РјРѕРЅРѕС‚РѕРЅРЅС‹Р№, Р±РµР· РїРµСЂРµС…РѕРґР° С‡РµСЂРµР· РїРѕР»РЅРѕС‡СЊ);
+' РµСЃР»Рё РЅРµРґРѕСЃС‚СѓРїРµРЅ вЂ” Timer СЃ Р·Р°С‰РёС‚РѕР№ РѕС‚ РѕР±РЅСѓР»РµРЅРёСЏ РІ ElapsedSec
 ' ============================================================================
 Private Function NowSec() As Double
     Dim c As Currency
@@ -287,8 +287,8 @@ Private Sub TimerBegin(ByVal id As Long)
         m_stClock(id) = Now
     End If
 End Sub
-' Закрывает интервал и прибавляет его длительность к этапу (интервалы суммируются).
-' Из блоков проверок вычитается время записи пакета ошибок: оно относится к «Выводу отчёта».
+' Р—Р°РєСЂС‹РІР°РµС‚ РёРЅС‚РµСЂРІР°Р» Рё РїСЂРёР±Р°РІР»СЏРµС‚ РµРіРѕ РґР»РёС‚РµР»СЊРЅРѕСЃС‚СЊ Рє СЌС‚Р°РїСѓ (РёРЅС‚РµСЂРІР°Р»С‹ СЃСѓРјРјРёСЂСѓСЋС‚СЃСЏ).
+' РР· Р±Р»РѕРєРѕРІ РїСЂРѕРІРµСЂРѕРє РІС‹С‡РёС‚Р°РµС‚СЃСЏ РІСЂРµРјСЏ Р·Р°РїРёСЃРё РїР°РєРµС‚Р° РѕС€РёР±РѕРє: РѕРЅРѕ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє В«Р’С‹РІРѕРґСѓ РѕС‚С‡С‘С‚Р°В».
 Private Sub TimerEnd(ByVal id As Long)
     Dim d As Double
     If Not m_stOpen(id) Then Exit Sub
@@ -302,8 +302,8 @@ Private Sub TimerEnd(ByVal id As Long)
     m_stDur(id) = m_stDur(id) + d
     m_stOpen(id) = False
 End Sub
-' Таблица этапов (столбцы A:H) на техническом листе; история накапливается
-' между прогонами. Возврат — номер прогона.
+' РўР°Р±Р»РёС†Р° СЌС‚Р°РїРѕРІ (СЃС‚РѕР»Р±С†С‹ A:H) РЅР° С‚РµС…РЅРёС‡РµСЃРєРѕРј Р»РёСЃС‚Рµ; РёСЃС‚РѕСЂРёСЏ РЅР°РєР°РїР»РёРІР°РµС‚СЃСЏ
+' РјРµР¶РґСѓ РїСЂРѕРіРѕРЅР°РјРё. Р’РѕР·РІСЂР°С‚ вЂ” РЅРѕРјРµСЂ РїСЂРѕРіРѕРЅР°.
 Private Function WriteTimings(ByVal ok As Boolean, ByVal note As String) As Long
     Dim ws As Worksheet
     Dim i As Long, runNo As Long, lastRow As Long, r0 As Long
@@ -328,8 +328,8 @@ Private Function WriteTimings(ByVal ok As Boolean, ByVal note As String) As Long
     m_stClock(ST_TOTAL) = m_startClock
     m_stUsed(ST_TOTAL) = True
     If Len(CStr(ws.Cells(1, TM_COL).Value)) = 0 Then
-        ws.Cells(1, TM_COL).Resize(1, TM_COLS).Value = Array("Прогон №", "Запуск", "Этап", _
-            "Начало этапа", "Длительность, сек", "% от общего", "Строк в выгрузке", "Примечание")
+        ws.Cells(1, TM_COL).Resize(1, TM_COLS).Value = Array("РџСЂРѕРіРѕРЅ в„–", "Р—Р°РїСѓСЃРє", "Р­С‚Р°Рї", _
+            "РќР°С‡Р°Р»Рѕ СЌС‚Р°РїР°", "Р”Р»РёС‚РµР»СЊРЅРѕСЃС‚СЊ, СЃРµРє", "% РѕС‚ РѕР±С‰РµРіРѕ", "РЎС‚СЂРѕРє РІ РІС‹РіСЂСѓР·РєРµ", "РџСЂРёРјРµС‡Р°РЅРёРµ")
         ws.Cells(1, TM_COL).Resize(1, TM_COLS).Font.Bold = True
         ws.Columns(TM_COL + 2).ColumnWidth = 62
         ws.Columns(TM_COL + 1).ColumnWidth = 19
@@ -352,7 +352,7 @@ Private Function WriteTimings(ByVal ok As Boolean, ByVal note As String) As Long
         If tot > 0# Then tbl(i, 6) = m_stDur(i) / tot
         tbl(i, 7) = m_runRows
     Next i
-    tbl(ST_TOTAL, 8) = IIf(ok, "OK", "ОШИБКА") & ". " & note
+    tbl(ST_TOTAL, 8) = IIf(ok, "OK", "РћРЁРР‘РљРђ") & ". " & note
     ws.Cells(r0, TM_COL).Resize(ST_COUNT, TM_COLS).Value = tbl
     ws.Range(ws.Cells(r0, TM_COL + 1), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 1)).NumberFormat = "dd.mm.yyyy hh:mm:ss"
     ws.Range(ws.Cells(r0, TM_COL + 3), ws.Cells(r0 + ST_COUNT - 1, TM_COL + 3)).NumberFormat = "hh:mm:ss"
@@ -364,9 +364,9 @@ Private Function WriteTimings(ByVal ok As Boolean, ByVal note As String) As Long
     WriteTimings = runNo
     Exit Function
 WtErr:
-    Application.StatusBar = "Замеры не записаны: " & Err.Description
+    Application.StatusBar = "Р—Р°РјРµСЂС‹ РЅРµ Р·Р°РїРёСЃР°РЅС‹: " & Err.Description
 End Function
-' Заголовок -> число колонок и признаки колонок сумм
+' Р—Р°РіРѕР»РѕРІРѕРє -> С‡РёСЃР»Рѕ РєРѕР»РѕРЅРѕРє Рё РїСЂРёР·РЅР°РєРё РєРѕР»РѕРЅРѕРє СЃСѓРјРј
 Private Sub PrepareHeader(ByRef headerParts As Variant, ByRef colCount As Long, _
     ByRef sumColFlag() As Boolean)
     Dim lastPartIdx As Long, c As Long
@@ -376,13 +376,13 @@ Private Sub PrepareHeader(ByRef headerParts As Variant, ByRef colCount As Long, 
         lastPartIdx = lastPartIdx - 1
     Loop
     colCount = lastPartIdx
-    If colCount < 1 Then Fail "Строка заголовка выгрузки SE16N не содержит колонок."
+    If colCount < 1 Then Fail "РЎС‚СЂРѕРєР° Р·Р°РіРѕР»РѕРІРєР° РІС‹РіСЂСѓР·РєРё SE16N РЅРµ СЃРѕРґРµСЂР¶РёС‚ РєРѕР»РѕРЅРѕРє."
     ReDim sumColFlag(1 To colCount)
     For c = 1 To colCount
-        If Left$(Trim$(CStr(headerParts(c))), 5) = "Сумма" Then sumColFlag(c) = True
+        If Left$(Trim$(CStr(headerParts(c))), 5) = "РЎСѓРјРјР°" Then sumColFlag(c) = True
     Next c
 End Sub
-' Строка уже разбита по «|»: пишет ячейки в arrOut(tgt, ...); True, если есть непустые значения
+' РЎС‚СЂРѕРєР° СѓР¶Рµ СЂР°Р·Р±РёС‚Р° РїРѕ В«|В»: РїРёС€РµС‚ СЏС‡РµР№РєРё РІ arrOut(tgt, ...); True, РµСЃР»Рё РµСЃС‚СЊ РЅРµРїСѓСЃС‚С‹Рµ Р·РЅР°С‡РµРЅРёСЏ
 Private Function StoreParts(ByRef parts() As String, ByVal colCount As Long, _
     ByRef sumColFlag() As Boolean, ByRef arrOut As Variant, ByVal tgt As Long) As Boolean
     Dim c As Long, n As Long, s As String
@@ -401,13 +401,13 @@ Private Function StoreParts(ByRef parts() As String, ByVal colCount As Long, _
     Next c
 End Function
 ' ============================================================================
-' Сервисные процедуры
+' РЎРµСЂРІРёСЃРЅС‹Рµ РїСЂРѕС†РµРґСѓСЂС‹
 ' ============================================================================
 Private Sub Fail(ByVal msg As String)
     Err.Raise ERR_CUSTOM, "PDChange", msg
 End Sub
 
-' Секунды с t0 с учётом перехода через полночь (NowSec() обнуляется в 00:00)
+' РЎРµРєСѓРЅРґС‹ СЃ t0 СЃ СѓС‡С‘С‚РѕРј РїРµСЂРµС…РѕРґР° С‡РµСЂРµР· РїРѕР»РЅРѕС‡СЊ (NowSec() РѕР±РЅСѓР»СЏРµС‚СЃСЏ РІ 00:00)
 Private Function ElapsedSec(ByVal t0 As Double) As Double
     Dim d As Double
     d = NowSec() - t0
@@ -451,7 +451,7 @@ Private Sub RestoreExcelState(ByVal keepStatusText As Boolean)
     If Not keepStatusText Then Application.StatusBar = False
 End Sub
 
-' Единая точка очистки: и для успешного завершения, и для ошибки
+' Р•РґРёРЅР°СЏ С‚РѕС‡РєР° РѕС‡РёСЃС‚РєРё: Рё РґР»СЏ СѓСЃРїРµС€РЅРѕРіРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ, Рё РґР»СЏ РѕС€РёР±РєРё
 Private Sub CleanupRun(ByVal keepStatusText As Boolean)
     On Error Resume Next
     Erase m_arrVer, m_arrStep, m_arrStepIdx, m_arrGrp, m_arrDt, m_arrDtOk, _
@@ -490,17 +490,17 @@ Private Function GetOrCreateSheet(ByVal wb As Workbook, ByVal sheetName As Strin
 End Function
 
 ' ============================================================================
-' Работа с SAP GUI
+' Р Р°Р±РѕС‚Р° СЃ SAP GUI
 ' ============================================================================
 Private Function SapStatusText() As String
     SapStatusText = GetStatusBarProperty("Message Type") & ": " & GetStatusBarProperty("Text")
 End Function
 
-' Элемент или понятная ошибка (с путём и текстом статус-строки SAP)
+' Р­Р»РµРјРµРЅС‚ РёР»Рё РїРѕРЅСЏС‚РЅР°СЏ РѕС€РёР±РєР° (СЃ РїСѓС‚С‘Рј Рё С‚РµРєСЃС‚РѕРј СЃС‚Р°С‚СѓСЃ-СЃС‚СЂРѕРєРё SAP)
 Private Function SapEl(ByVal sess As Object, ByVal id As String) As Object
     If Not IsElementExists(id) Then
-        Fail "Элемент SAP GUI не найден: " & id & ". Проверьте текущий экран SAP, вариант " & _
-            "просмотра и индексы полей. Статус-строка SAP: " & SapStatusText()
+        Fail "Р­Р»РµРјРµРЅС‚ SAP GUI РЅРµ РЅР°Р№РґРµРЅ: " & id & ". РџСЂРѕРІРµСЂСЊС‚Рµ С‚РµРєСѓС‰РёР№ СЌРєСЂР°РЅ SAP, РІР°СЂРёР°РЅС‚ " & _
+            "РїСЂРѕСЃРјРѕС‚СЂР° Рё РёРЅРґРµРєСЃС‹ РїРѕР»РµР№. РЎС‚Р°С‚СѓСЃ-СЃС‚СЂРѕРєР° SAP: " & SapStatusText()
     End If
     Set SapEl = sess.findById(id)
 End Function
@@ -515,22 +515,22 @@ Private Sub SapWaitReady(ByVal sess As Object)
     t0 = NowSec()
     Do While sess.Busy
         If ElapsedSec(t0) > SAP_BUSY_TIMEOUT_SEC Then
-            Fail "Сессия SAP занята более " & Format(SAP_BUSY_TIMEOUT_SEC, "0") & _
-                " сек (этап: " & m_stage & ")."
+            Fail "РЎРµСЃСЃРёСЏ SAP Р·Р°РЅСЏС‚Р° Р±РѕР»РµРµ " & Format(SAP_BUSY_TIMEOUT_SEC, "0") & _
+                " СЃРµРє (СЌС‚Р°Рї: " & m_stage & ")."
         End If
         PauseMs 100
     Loop
 End Sub
 
-' Ошибочное сообщение SAP (тип E/A) прерывает выполнение с его текстом
+' РћС€РёР±РѕС‡РЅРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ SAP (С‚РёРї E/A) РїСЂРµСЂС‹РІР°РµС‚ РІС‹РїРѕР»РЅРµРЅРёРµ СЃ РµРіРѕ С‚РµРєСЃС‚РѕРј
 Private Sub SapCheckStatus(ByVal ctx As String)
     Dim t As String
     t = GetStatusBarProperty("Message Type")
-    If t = "E" Or t = "A" Then Fail ctx & ": SAP вернул сообщение типа " & t & ": " & GetStatusBarProperty("Text")
+    If t = "E" Or t = "A" Then Fail ctx & ": SAP РІРµСЂРЅСѓР» СЃРѕРѕР±С‰РµРЅРёРµ С‚РёРїР° " & t & ": " & GetStatusBarProperty("Text")
 End Sub
 
 ' ============================================================================
-' Буфер обмена
+' Р‘СѓС„РµСЂ РѕР±РјРµРЅР°
 ' ============================================================================
 Private Function ClearClipboard(ByVal dataObj As Object, ByVal attempts As Long) As Boolean
     Dim t As Long
@@ -547,8 +547,8 @@ Private Function ClearClipboard(ByVal dataObj As Object, ByVal attempts As Long)
     Next t
 End Function
 
-' Ждёт данных в буфере обмена; текст пишется прямо в exportText (ByRef, без копий
-' 100+ МБ). Размер должен перестать расти (защита от неполной выгрузки).
+' Р–РґС‘С‚ РґР°РЅРЅС‹С… РІ Р±СѓС„РµСЂРµ РѕР±РјРµРЅР°; С‚РµРєСЃС‚ РїРёС€РµС‚СЃСЏ РїСЂСЏРјРѕ РІ exportText (ByRef, Р±РµР· РєРѕРїРёР№
+' 100+ РњР‘). Р Р°Р·РјРµСЂ РґРѕР»Р¶РµРЅ РїРµСЂРµСЃС‚Р°С‚СЊ СЂР°СЃС‚Рё (Р·Р°С‰РёС‚Р° РѕС‚ РЅРµРїРѕР»РЅРѕР№ РІС‹РіСЂСѓР·РєРё).
 Private Function WaitClipboardText(ByVal dataObj As Object, ByVal marker As String, _
     ByVal timeoutSec As Double, ByRef exportText As String, _
     ByVal pct As Long, ByVal stageTxt As String) As Boolean
@@ -563,7 +563,7 @@ Private Function WaitClipboardText(ByVal dataObj As Object, ByVal marker As Stri
         On Error GoTo 0
         If Len(exportText) > 1 Then
             If ElapsedSec(t0) < 10 And Len(exportText) > 1000000 And suspicious < 3 Then
-                ' 1+ МБ за первые 10 сек физически невозможны — это остаток прошлого прогона
+                ' 1+ РњР‘ Р·Р° РїРµСЂРІС‹Рµ 10 СЃРµРє С„РёР·РёС‡РµСЃРєРё РЅРµРІРѕР·РјРѕР¶РЅС‹ вЂ” СЌС‚Рѕ РѕСЃС‚Р°С‚РѕРє РїСЂРѕС€Р»РѕРіРѕ РїСЂРѕРіРѕРЅР°
                 suspicious = suspicious + 1
                 ClearClipboard dataObj, 1
                 prevLen = -1
@@ -582,17 +582,17 @@ Private Function WaitClipboardText(ByVal dataObj As Object, ByVal marker As Stri
                 End If
             End If
         End If
-        ShowProgress pct, stageTxt & " (ожидание буфера обмена: " & Format(ElapsedSec(t0), "0") & _
-            " сек, в буфере обмена " & Format(Len(exportText) / 1048576, "0.0") & " МБ)"
+        ShowProgress pct, stageTxt & " (РѕР¶РёРґР°РЅРёРµ Р±СѓС„РµСЂР° РѕР±РјРµРЅР°: " & Format(ElapsedSec(t0), "0") & _
+            " СЃРµРє, РІ Р±СѓС„РµСЂРµ РѕР±РјРµРЅР° " & Format(Len(exportText) / 1048576, "0.0") & " РњР‘)"
         If Len(exportText) > 1 Then PauseMs 500 Else PauseMs 250
     Loop While ElapsedSec(t0) < timeoutSec
 End Function
 
 ' ============================================================================
-' Разбор данных
+' Р Р°Р·Р±РѕСЂ РґР°РЅРЅС‹С…
 ' ============================================================================
-' Ключ: убираем ведущие нули у чисто цифровых значений (без CLng/IsNumeric:
-' не зависит от локали и не ломается на 10-значных номерах и «1,5»)
+' РљР»СЋС‡: СѓР±РёСЂР°РµРј РІРµРґСѓС‰РёРµ РЅСѓР»Рё Сѓ С‡РёСЃС‚Рѕ С†РёС„СЂРѕРІС‹С… Р·РЅР°С‡РµРЅРёР№ (Р±РµР· CLng/IsNumeric:
+' РЅРµ Р·Р°РІРёСЃРёС‚ РѕС‚ Р»РѕРєР°Р»Рё Рё РЅРµ Р»РѕРјР°РµС‚СЃСЏ РЅР° 10-Р·РЅР°С‡РЅС‹С… РЅРѕРјРµСЂР°С… Рё В«1,5В»)
 Private Function NormalizeSapKey(ByVal s As String) As String
     Dim t As String, n As Long, p As Long
     t = Trim$(s)
@@ -610,7 +610,7 @@ Private Function NormalizeSapKey(ByVal s As String) As String
     NormalizeSapKey = t
 End Function
 
-' SAP-формат «1.234.567,89-»; Val не зависит от региональных настроек
+' SAP-С„РѕСЂРјР°С‚ В«1.234.567,89-В»; Val РЅРµ Р·Р°РІРёСЃРёС‚ РѕС‚ СЂРµРіРёРѕРЅР°Р»СЊРЅС‹С… РЅР°СЃС‚СЂРѕРµРє
 Private Function ParseSapNumber(ByVal s As String) As Double
     Dim t As String, neg As Boolean
     t = s
@@ -627,7 +627,7 @@ Private Function ParseSapNumber(ByVal s As String) As Double
     If neg Then ParseSapNumber = -ParseSapNumber
 End Function
 
-' Дата ДД.ММ.ГГГГ без CDate/IsDate по умолчанию (зависят от локали)
+' Р”Р°С‚Р° Р”Р”.РњРњ.Р“Р“Р“Р“ Р±РµР· CDate/IsDate РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ (Р·Р°РІРёСЃСЏС‚ РѕС‚ Р»РѕРєР°Р»Рё)
 Private Function ParseSapDate(ByVal s As String, ByRef ok As Boolean) As Date
     Dim d As Long, m As Long, y As Long, dt As Date
     ok = False
@@ -690,13 +690,13 @@ Private Function ResolveColumnIndex(ByRef headerParts As Variant, ByVal colCount
     Next c
 End Function
 
-' Строка-разделитель ALV состоит только из «-» и «|»; данные с «---» в тексте — не разделитель
+' РЎС‚СЂРѕРєР°-СЂР°Р·РґРµР»РёС‚РµР»СЊ ALV СЃРѕСЃС‚РѕРёС‚ С‚РѕР»СЊРєРѕ РёР· В«-В» Рё В«|В»; РґР°РЅРЅС‹Рµ СЃ В«---В» РІ С‚РµРєСЃС‚Рµ вЂ” РЅРµ СЂР°Р·РґРµР»РёС‚РµР»СЊ
 Private Function IsSeparatorLine(ByRef ln As String) As Boolean
     If InStr(ln, "---") = 0 Then Exit Function
     IsSeparatorLine = (Len(Replace(Replace(ln, "-", ""), "|", "")) = 0)
 End Function
 
-' Индекс строки заголовка в выгрузке (-1 — не найдена)
+' РРЅРґРµРєСЃ СЃС‚СЂРѕРєРё Р·Р°РіРѕР»РѕРІРєР° РІ РІС‹РіСЂСѓР·РєРµ (-1 вЂ” РЅРµ РЅР°Р№РґРµРЅР°)
 Private Function FindHeaderLine(ByRef clipLines() As String) As Long
     Dim i As Long, ln As String
     FindHeaderLine = -1
@@ -704,7 +704,7 @@ Private Function FindHeaderLine(ByRef clipLines() As String) As Long
         ln = clipLines(i)
         If InStr(ln, "|") > 0 Then
             If Not IsSeparatorLine(ln) Then
-                If InStr(ln, "СПП") > 0 Or InStr(ln, "Версия") > 0 Then
+                If InStr(ln, "РЎРџРџ") > 0 Or InStr(ln, "Р’РµСЂСЃРёСЏ") > 0 Then
                     FindHeaderLine = i
                     Exit Function
                 End If
@@ -714,7 +714,7 @@ Private Function FindHeaderLine(ByRef clipLines() As String) As Long
 End Function
 
 ' ============================================================================
-' Флажок «Документ СПП» и ключ группировки
+' Р¤Р»Р°Р¶РѕРє В«Р”РѕРєСѓРјРµРЅС‚ РЎРџРџВ» Рё РєР»СЋС‡ РіСЂСѓРїРїРёСЂРѕРІРєРё
 ' ============================================================================
 Private Function GetOrCreateDocSPPCheckbox(ByVal wsReport As Worksheet) As Object
     Dim chk As Object, shp As Shape
@@ -742,13 +742,13 @@ Private Function GetOrCreateDocSPPCheckbox(ByVal wsReport As Worksheet) As Objec
         End If
         Set chk = wsReport.CheckBoxes.Add(chkLeft, chkTop, 110, 18)
         chk.Name = "chkDocSPP"
-        chk.Caption = "Документ СПП"
+        chk.Caption = "Р”РѕРєСѓРјРµРЅС‚ РЎРџРџ"
     End If
     Set GetOrCreateDocSPPCheckbox = chk
 End Function
 
-' Ключ группировки строки: при флажке — сцепка «документ СПП-позиция-сч/ф» (ТЗ 1.33),
-' иначе СПП-элемент. Пустая строка — строка пропускается.
+' РљР»СЋС‡ РіСЂСѓРїРїРёСЂРѕРІРєРё СЃС‚СЂРѕРєРё: РїСЂРё С„Р»Р°Р¶РєРµ вЂ” СЃС†РµРїРєР° В«РґРѕРєСѓРјРµРЅС‚ РЎРџРџ-РїРѕР·РёС†РёСЏ-СЃС‡/С„В» (РўР— 1.33),
+' РёРЅР°С‡Рµ РЎРџРџ-СЌР»РµРјРµРЅС‚. РџСѓСЃС‚Р°СЏ СЃС‚СЂРѕРєР° вЂ” СЃС‚СЂРѕРєР° РїСЂРѕРїСѓСЃРєР°РµС‚СЃСЏ.
 Private Function GroupKeyOfRow(ByRef arrData As Variant, ByVal i As Long, ByVal idxSPP As Long) As String
     Dim docPart As String
     If m_docSPPOn And m_idxDocSPP > 0 Then
@@ -767,7 +767,7 @@ Private Function GrpName(ByVal g As Long) As String
 End Function
 
 ' ============================================================================
-' Кэш строк: версии, шаги, даты, суммы и номера групп — один проход
+' РљСЌС€ СЃС‚СЂРѕРє: РІРµСЂСЃРёРё, С€Р°РіРё, РґР°С‚С‹, СЃСѓРјРјС‹ Рё РЅРѕРјРµСЂР° РіСЂСѓРїРї вЂ” РѕРґРёРЅ РїСЂРѕС…РѕРґ
 ' ============================================================================
 Private Sub BuildRowCache(ByRef arrData As Variant, ByVal totalRows As Long, _
     ByRef cols As TCols, ByVal arrSteps As Variant)
@@ -793,8 +793,8 @@ Private Sub BuildRowCache(ByRef arrData As Variant, ByVal totalRows As Long, _
     Set m_dictGrp = CreateObject("Scripting.Dictionary")
     For i = 1 To totalRows
         If i Mod 50000 = 0 Then
-            ShowProgress 90, "Построение кэша ключей: " & Format(i, "#,##0") & _
-                " из " & Format(totalRows, "#,##0")
+            ShowProgress 90, "РџРѕСЃС‚СЂРѕРµРЅРёРµ РєСЌС€Р° РєР»СЋС‡РµР№: " & Format(i, "#,##0") & _
+                " РёР· " & Format(totalRows, "#,##0")
         End If
         m_arrVer(i) = NormalizeSapKey(CStr(arrData(i, cols.vers)))
         k = GroupKeyOfRow(arrData, i, cols.spp)
@@ -828,23 +828,23 @@ Private Sub BuildRowCache(ByRef arrData As Variant, ByVal totalRows As Long, _
 End Sub
 
 ' ============================================================================
-' Таблица ошибок: шапка, пакет записи, ширины
+' РўР°Р±Р»РёС†Р° РѕС€РёР±РѕРє: С€Р°РїРєР°, РїР°РєРµС‚ Р·Р°РїРёСЃРё, С€РёСЂРёРЅС‹
 ' ============================================================================
 Private Sub WriteErrTableHeader(ByVal wsReport As Worksheet, ByVal resRow As Long)
-    wsReport.Cells(resRow, 1).Value = "Блок проверки"
-    wsReport.Cells(resRow, 2).Value = "Версия"
-    wsReport.Cells(resRow, 3).Value = "Шаг"
+    wsReport.Cells(resRow, 1).Value = "Р‘Р»РѕРє РїСЂРѕРІРµСЂРєРё"
+    wsReport.Cells(resRow, 2).Value = "Р’РµСЂСЃРёСЏ"
+    wsReport.Cells(resRow, 3).Value = "РЁР°Рі"
     If m_docSPPOn Then
-        wsReport.Cells(resRow, 4).Value = "Документ СПП+поз+сч/ф"
+        wsReport.Cells(resRow, 4).Value = "Р”РѕРєСѓРјРµРЅС‚ РЎРџРџ+РїРѕР·+СЃС‡/С„"
     Else
-        wsReport.Cells(resRow, 4).Value = "СПП"
+        wsReport.Cells(resRow, 4).Value = "РЎРџРџ"
     End If
-    wsReport.Cells(resRow, 5).Value = "Строка"
-    wsReport.Cells(resRow, 6).Value = "Значение"
-    wsReport.Cells(resRow, 7).Value = "Знак"
-    wsReport.Cells(resRow, 8).Value = "Эталон"
-    wsReport.Cells(resRow, 9).Value = "Разница"
-    wsReport.Cells(resRow, 10).Value = "Текст ошибки"
+    wsReport.Cells(resRow, 5).Value = "РЎС‚СЂРѕРєР°"
+    wsReport.Cells(resRow, 6).Value = "Р—РЅР°С‡РµРЅРёРµ"
+    wsReport.Cells(resRow, 7).Value = "Р—РЅР°Рє"
+    wsReport.Cells(resRow, 8).Value = "Р­С‚Р°Р»РѕРЅ"
+    wsReport.Cells(resRow, 9).Value = "Р Р°Р·РЅРёС†Р°"
+    wsReport.Cells(resRow, 10).Value = "РўРµРєСЃС‚ РѕС€РёР±РєРё"
     With wsReport.Range(wsReport.Cells(resRow, 1), wsReport.Cells(resRow, ERR_COLS))
         .Font.Bold = True
         .Interior.Color = RGB(217, 217, 217)
@@ -872,7 +872,7 @@ Private Sub InitErrBatch()
     m_hdrWritten = False
 End Sub
 
-' Версия/шаг: число, если цифровой текст разумной длины (фильтры и сортировка)
+' Р’РµСЂСЃРёСЏ/С€Р°Рі: С‡РёСЃР»Рѕ, РµСЃР»Рё С†РёС„СЂРѕРІРѕР№ С‚РµРєСЃС‚ СЂР°Р·СѓРјРЅРѕР№ РґР»РёРЅС‹ (С„РёР»СЊС‚СЂС‹ Рё СЃРѕСЂС‚РёСЂРѕРІРєР°)
 Private Function NumOrText(ByVal s As String) As Variant
     If Len(s) = 0 Then
         NumOrText = Empty
@@ -883,7 +883,7 @@ Private Function NumOrText(ByVal s As String) As Variant
     End If
 End Function
 
-' Запись накопленных строк одним присваиванием; форматы — по диапазонам
+' Р—Р°РїРёСЃСЊ РЅР°РєРѕРїР»РµРЅРЅС‹С… СЃС‚СЂРѕРє РѕРґРЅРёРј РїСЂРёСЃРІР°РёРІР°РЅРёРµРј; С„РѕСЂРјР°С‚С‹ вЂ” РїРѕ РґРёР°РїР°Р·РѕРЅР°Рј
 Private Sub FlushErrBatch()
     Dim n As Long, r As Long, c As Long, runStart As Long
     Dim tmp() As Variant, tmpLink() As Variant
@@ -922,7 +922,7 @@ Private Sub FlushErrBatch()
     m_ebN = 0
 End Sub
 
-' Формат колонок «Значение»/«Эталон» для серии строк пакета с одним типом
+' Р¤РѕСЂРјР°С‚ РєРѕР»РѕРЅРѕРє В«Р—РЅР°С‡РµРЅРёРµВ»/В«Р­С‚Р°Р»РѕРЅВ» РґР»СЏ СЃРµСЂРёРё СЃС‚СЂРѕРє РїР°РєРµС‚Р° СЃ РѕРґРЅРёРј С‚РёРїРѕРј
 Private Sub ApplyKindFormat(ByVal fromIdx As Long, ByVal toIdx As Long)
     Dim fmt As String
     If m_ebKind(fromIdx) = 1 Then fmt = "DD.MM.YYYY" Else fmt = "#,##0.00"
@@ -932,7 +932,7 @@ Private Sub ApplyKindFormat(ByVal fromIdx As Long, ByVal toIdx As Long)
     End With
 End Sub
 
-' Добавляет строку в таблицу ошибок (шапка — при первой строке) и сдвигает resRow
+' Р”РѕР±Р°РІР»СЏРµС‚ СЃС‚СЂРѕРєСѓ РІ С‚Р°Р±Р»РёС†Сѓ РѕС€РёР±РѕРє (С€Р°РїРєР° вЂ” РїСЂРё РїРµСЂРІРѕР№ СЃС‚СЂРѕРєРµ) Рё СЃРґРІРёРіР°РµС‚ resRow
 Private Sub AddErrRow(ByRef resRow As Long, ByVal blockName As String, ByVal verTxt As String, _
     ByVal stepTxt As String, ByVal key As String, ByVal rowNum As Long, ByVal valCur As Variant, _
     ByVal signTxt As String, ByVal valRef As Variant, ByVal errText As String)
@@ -979,12 +979,12 @@ Private Sub AddErrRow(ByRef resRow As Long, ByVal blockName As String, ByVal ver
 End Sub
 
 ' ============================================================================
-' Блок 1 — качество данных внутри одной версии
-'   п.1: итог M <> 0 И итог N < итога M
-'   п.2: дата оплаты < 01.01.2025 И M в строке <> 0
-'   п.3: дата оплаты позже последнего дня месяца выборки
-'   п.4: 4-й шаг, «Документ О» (H) и «Документ ф» (J) пусты
-' Группы — по номеру из кэша; порядок вывода — порядок первого появления.
+' Р‘Р»РѕРє 1 вЂ” РєР°С‡РµСЃС‚РІРѕ РґР°РЅРЅС‹С… РІРЅСѓС‚СЂРё РѕРґРЅРѕР№ РІРµСЂСЃРёРё
+'   Рї.1: РёС‚РѕРі M <> 0 Р РёС‚РѕРі N < РёС‚РѕРіР° M
+'   Рї.2: РґР°С‚Р° РѕРїР»Р°С‚С‹ < 01.01.2025 Р M РІ СЃС‚СЂРѕРєРµ <> 0
+'   Рї.3: РґР°С‚Р° РѕРїР»Р°С‚С‹ РїРѕР·Р¶Рµ РїРѕСЃР»РµРґРЅРµРіРѕ РґРЅСЏ РјРµСЃСЏС†Р° РІС‹Р±РѕСЂРєРё
+'   Рї.4: 4-Р№ С€Р°Рі, В«Р”РѕРєСѓРјРµРЅС‚ РћВ» (H) Рё В«Р”РѕРєСѓРјРµРЅС‚ С„В» (J) РїСѓСЃС‚С‹
+' Р“СЂСѓРїРїС‹ вЂ” РїРѕ РЅРѕРјРµСЂСѓ РёР· РєСЌС€Р°; РїРѕСЂСЏРґРѕРє РІС‹РІРѕРґР° вЂ” РїРѕСЂСЏРґРѕРє РїРµСЂРІРѕРіРѕ РїРѕСЏРІР»РµРЅРёСЏ.
 ' ============================================================================
 Private Function Check1_Quality(ByVal verCur As String, ByVal dtPeriodEnd As Date, _
     ByVal resRow As Long, ByVal pctBase As Long, ByVal pctSpan As Long) As Long
@@ -1003,7 +1003,7 @@ Private Function Check1_Quality(ByVal verCur As String, ByVal dtPeriodEnd As Dat
         Check1_Quality = resRow
         Exit Function
     End If
-    blockName = "Блок 1"
+    blockName = "Р‘Р»РѕРє 1"
     checkDocO = (m_idxDocO > 0 And m_idxDocSF > 0)
     ReDim sumM(1 To nG): ReDim sumN(1 To nG): ReDim firstRow(1 To nG)
     ReDim badRow(1 To nG): ReDim badDt(1 To nG): ReDim badStep(1 To nG)
@@ -1013,8 +1013,8 @@ Private Function Check1_Quality(ByVal verCur As String, ByVal dtPeriodEnd As Dat
     For i = 1 To m_nRows
         If i Mod 10000 = 0 Then
             ShowProgress pctBase + CLng((i / m_nRows) * pctSpan), _
-                blockName & " (версия " & verCur & "): строка " & Format(i, "#,##0") & _
-                " из " & Format(m_nRows, "#,##0")
+                blockName & " (РІРµСЂСЃРёСЏ " & verCur & "): СЃС‚СЂРѕРєР° " & Format(i, "#,##0") & _
+                " РёР· " & Format(m_nRows, "#,##0")
         End If
         If m_arrVer(i) = verCur Then
             g = m_arrGrp(i)
@@ -1058,7 +1058,7 @@ Private Function Check1_Quality(ByVal verCur As String, ByVal dtPeriodEnd As Dat
         g = ordSum(idx)
         If Round(sumM(g), 2) <> 0 And Round(sumN(g), 2) < Round(sumM(g), 2) Then
             AddErrRow resRow, blockName, verCur, "", GrpName(g), firstRow(g), _
-                sumM(g), "больше", sumN(g), ERR_TXT_SUM
+                sumM(g), "Р±РѕР»СЊС€Рµ", sumN(g), ERR_TXT_SUM
             cntErr = cntErr + 1
             If cntErr >= MAX_ERR_LINES Then Exit For
         End If
@@ -1066,21 +1066,21 @@ Private Function Check1_Quality(ByVal verCur As String, ByVal dtPeriodEnd As Dat
     For idx = 1 To nBad
         g = ordBad(idx)
         AddErrRow resRow, blockName, verCur, badStep(g), GrpName(g), badRow(g), _
-            badDt(g), "раньше", m_dtThreshold, ERR_TXT_DATE_PAST
+            badDt(g), "СЂР°РЅСЊС€Рµ", m_dtThreshold, ERR_TXT_DATE_PAST
         cntErr = cntErr + 1
         If cntErr >= MAX_ERR_LINES Then Exit For
     Next idx
     For idx = 1 To nFut
         g = ordFut(idx)
         AddErrRow resRow, blockName, verCur, futStep(g), GrpName(g), futRow(g), _
-            futDt(g), "позже", dtPeriodEnd, ERR_TXT_DATE_FUT
+            futDt(g), "РїРѕР·Р¶Рµ", dtPeriodEnd, ERR_TXT_DATE_FUT
         cntErr = cntErr + 1
         If cntErr >= MAX_ERR_LINES Then Exit For
     Next idx
     For idx = 1 To nDoc
         g = ordDoc(idx)
         AddErrRow resRow, blockName, verCur, STEP_DOC_O, GrpName(g), docRow(g), _
-            "", "пусто", "", ERR_TXT_DOC_O
+            "", "РїСѓСЃС‚Рѕ", "", ERR_TXT_DOC_O
         cntErr = cntErr + 1
         If cntErr >= MAX_ERR_LINES Then Exit For
     Next idx
@@ -1088,7 +1088,7 @@ Private Function Check1_Quality(ByVal verCur As String, ByVal dtPeriodEnd As Dat
 End Function
 
 ' ============================================================================
-' Блок 2 — сверка итогов M и N между двумя версиями
+' Р‘Р»РѕРє 2 вЂ” СЃРІРµСЂРєР° РёС‚РѕРіРѕРІ M Рё N РјРµР¶РґСѓ РґРІСѓРјСЏ РІРµСЂСЃРёСЏРјРё
 ' ============================================================================
 Private Function Check2_VersionsCompare(ByVal verCur As String, ByVal verPrev As String, _
     ByVal resRow As Long, ByVal pctBase As Long, ByVal pctSpan As Long) As Long
@@ -1105,15 +1105,15 @@ Private Function Check2_VersionsCompare(ByVal verCur As String, ByVal verPrev As
         Check2_VersionsCompare = resRow
         Exit Function
     End If
-    blockName = "Блок 2 (" & verCur & " vs " & verPrev & ")"
-    verLegend = " – Значение: версия " & verCur & ", Эталон: версия " & verPrev
+    blockName = "Р‘Р»РѕРє 2 (" & verCur & " vs " & verPrev & ")"
+    verLegend = " вЂ“ Р—РЅР°С‡РµРЅРёРµ: РІРµСЂСЃРёСЏ " & verCur & ", Р­С‚Р°Р»РѕРЅ: РІРµСЂСЃРёСЏ " & verPrev
     ReDim curM(1 To nG): ReDim curN(1 To nG): ReDim curRow(1 To nG)
     ReDim prevM(1 To nG): ReDim prevN(1 To nG): ReDim prevRow(1 To nG)
     ReDim ordCur(1 To nG): ReDim ordPrev(1 To nG)
     For i = 1 To m_nRows
         If i Mod 10000 = 0 Then
             ShowProgress pctBase + CLng((i / m_nRows) * pctSpan), _
-                blockName & ": строка " & Format(i, "#,##0") & " из " & Format(m_nRows, "#,##0")
+                blockName & ": СЃС‚СЂРѕРєР° " & Format(i, "#,##0") & " РёР· " & Format(m_nRows, "#,##0")
         End If
         ver = m_arrVer(i)
         If ver = verCur Then
@@ -1166,8 +1166,8 @@ Private Function Check2_VersionsCompare(ByVal verCur As String, ByVal verPrev As
             g = ordPrev(idx)
             If curRow(g) = 0 Then
                 AddErrRow resRow, blockName, verPrev, "", GrpName(g), prevRow(g), _
-                    "", "только в версии " & verPrev, "", _
-                    IIf(m_docSPPOn, "Документ СПП", "СПП") & " отсутствует в версии " & verCur
+                    "", "С‚РѕР»СЊРєРѕ РІ РІРµСЂСЃРёРё " & verPrev, "", _
+                    IIf(m_docSPPOn, "Р”РѕРєСѓРјРµРЅС‚ РЎРџРџ", "РЎРџРџ") & " РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РІ РІРµСЂСЃРёРё " & verCur
                 cntErr = cntErr + 1
                 If cntErr >= MAX_ERR_LINES Then Exit For
             End If
@@ -1177,7 +1177,7 @@ Private Function Check2_VersionsCompare(ByVal verCur As String, ByVal verPrev As
 End Function
 
 ' ============================================================================
-' Блок 3 — итоги N по группе должны совпадать на всех шагах диапазона
+' Р‘Р»РѕРє 3 вЂ” РёС‚РѕРіРё N РїРѕ РіСЂСѓРїРїРµ РґРѕР»Р¶РЅС‹ СЃРѕРІРїР°РґР°С‚СЊ РЅР° РІСЃРµС… С€Р°РіР°С… РґРёР°РїР°Р·РѕРЅР°
 ' ============================================================================
 Private Function Check3_Consistency(ByVal verCur As String, ByVal arrSteps As Variant, _
     ByVal resRow As Long, ByVal pctBase As Long, ByVal pctSpan As Long) As Long
@@ -1193,7 +1193,7 @@ Private Function Check3_Consistency(ByVal verCur As String, ByVal arrSteps As Va
         Exit Function
     End If
     nSteps = UBound(arrSteps) - LBound(arrSteps) + 1
-    blockName = "Блок 3"
+    blockName = "Р‘Р»РѕРє 3"
     ReDim sums(1 To nG, 0 To nSteps - 1)
     ReDim firstRows(1 To nG, 0 To nSteps - 1)
     ReDim seen(1 To nG)
@@ -1201,8 +1201,8 @@ Private Function Check3_Consistency(ByVal verCur As String, ByVal arrSteps As Va
     For i = 1 To m_nRows
         If i Mod 10000 = 0 Then
             ShowProgress pctBase + CLng((i / m_nRows) * pctSpan), _
-                blockName & " (версия " & verCur & "): строка " & Format(i, "#,##0") & _
-                " из " & Format(m_nRows, "#,##0")
+                blockName & " (РІРµСЂСЃРёСЏ " & verCur & "): СЃС‚СЂРѕРєР° " & Format(i, "#,##0") & _
+                " РёР· " & Format(m_nRows, "#,##0")
         End If
         If m_arrVer(i) = verCur Then
             j0 = m_arrStepIdx(i)
@@ -1232,7 +1232,7 @@ Private Function Check3_Consistency(ByVal verCur As String, ByVal arrSteps As Va
             For j = 0 To nSteps - 1
                 If j = jMax Then
                     AddErrRow resRow, blockName, verCur, CStr(arrSteps(LBound(arrSteps) + j)), _
-                        GrpName(g), firstRows(g, j), sums(g, j), "макс", dMax, ERR_TXT_CONSIST
+                        GrpName(g), firstRows(g, j), sums(g, j), "РјР°РєСЃ", dMax, ERR_TXT_CONSIST
                 Else
                     AddErrRow resRow, blockName, verCur, CStr(arrSteps(LBound(arrSteps) + j)), _
                         GrpName(g), firstRows(g, j), sums(g, j), "<>", dMax, ERR_TXT_CONSIST
@@ -1247,15 +1247,15 @@ Private Function Check3_Consistency(ByVal verCur As String, ByVal arrSteps As Va
 End Function
 
 ' ============================================================================
-' Параметры запуска
+' РџР°СЂР°РјРµС‚СЂС‹ Р·Р°РїСѓСЃРєР°
 ' ============================================================================
 Private Function RequireParam(ByVal ws As Worksheet, ByVal r As Long, ByVal c As Long, _
     ByVal title As String) As String
     Dim s As String
     s = Trim$(CStr(ws.Cells(r, c).Value))
     If s = "" Then
-        Fail "Не заполнено поле «" & title & "» в ячейке " & ws.Cells(r, c).Address(False, False) & _
-            " листа '" & ws.Name & "'!"
+        Fail "РќРµ Р·Р°РїРѕР»РЅРµРЅРѕ РїРѕР»Рµ В«" & title & "В» РІ СЏС‡РµР№РєРµ " & ws.Cells(r, c).Address(False, False) & _
+            " Р»РёСЃС‚Р° '" & ws.Name & "'!"
     End If
     RequireParam = s
 End Function
@@ -1263,21 +1263,21 @@ End Function
 Private Sub ReadParams(ByVal wsReport As Worksheet, ByRef p As TRunParams)
     Dim stA As Long, stB As Long, stTmp As Long, st As Long
     Dim arr() As Variant
-    p.VariantName = RequireParam(wsReport, P_ROW_VARIANT, 2, "Вариант просмотра")
-    p.Gjahr = RequireParam(wsReport, P_ROW_GJAHR, 2, "Финансовый год")
-    p.Monat = RequireParam(wsReport, P_ROW_MONAT, 2, "Период")
-    p.Vers1 = RequireParam(wsReport, P_ROW_VERS, 2, "Версия")
+    p.VariantName = RequireParam(wsReport, P_ROW_VARIANT, 2, "Р’Р°СЂРёР°РЅС‚ РїСЂРѕСЃРјРѕС‚СЂР°")
+    p.Gjahr = RequireParam(wsReport, P_ROW_GJAHR, 2, "Р¤РёРЅР°РЅСЃРѕРІС‹Р№ РіРѕРґ")
+    p.Monat = RequireParam(wsReport, P_ROW_MONAT, 2, "РџРµСЂРёРѕРґ")
+    p.Vers1 = RequireParam(wsReport, P_ROW_VERS, 2, "Р’РµСЂСЃРёСЏ")
     p.Vers2 = Trim$(CStr(wsReport.Cells(P_ROW_VERS, 3).Value))
-    p.Step1 = RequireParam(wsReport, P_ROW_STEP, 2, "Шаг")
+    p.Step1 = RequireParam(wsReport, P_ROW_STEP, 2, "РЁР°Рі")
     p.Step2 = Trim$(CStr(wsReport.Cells(P_ROW_STEP, 3).Value))
     If Len(p.Gjahr) <> 4 Or p.Gjahr Like "*[!0-9]*" Then
-        Fail "Финансовый год (B2) должен состоять из 4 цифр, указано: '" & p.Gjahr & "'."
+        Fail "Р¤РёРЅР°РЅСЃРѕРІС‹Р№ РіРѕРґ (B2) РґРѕР»Р¶РµРЅ СЃРѕСЃС‚РѕСЏС‚СЊ РёР· 4 С†РёС„СЂ, СѓРєР°Р·Р°РЅРѕ: '" & p.Gjahr & "'."
     End If
     If Len(p.Monat) > 3 Or p.Monat Like "*[!0-9]*" Then
-        Fail "Период (B3) должен быть числом 1-16, указано: '" & p.Monat & "'."
+        Fail "РџРµСЂРёРѕРґ (B3) РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ С‡РёСЃР»РѕРј 1-16, СѓРєР°Р·Р°РЅРѕ: '" & p.Monat & "'."
     End If
     If CLng(p.Monat) < 1 Or CLng(p.Monat) > 16 Then
-        Fail "Период (B3) должен быть в диапазоне 1-16, указано: '" & p.Monat & "'."
+        Fail "РџРµСЂРёРѕРґ (B3) РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РІ РґРёР°РїР°Р·РѕРЅРµ 1-16, СѓРєР°Р·Р°РЅРѕ: '" & p.Monat & "'."
     End If
     If p.Vers2 <> "" Then
         p.arrVers = Array(p.Vers1, p.Vers2)
@@ -1310,7 +1310,7 @@ Private Sub ReadParams(ByVal wsReport As Worksheet, ByRef p As TRunParams)
 End Sub
 
 ' ============================================================================
-' Подготовка листов (вызывается ПОСЛЕ успешного подключения к SAP)
+' РџРѕРґРіРѕС‚РѕРІРєР° Р»РёСЃС‚РѕРІ (РІС‹Р·С‹РІР°РµС‚СЃСЏ РџРћРЎР›Р• СѓСЃРїРµС€РЅРѕРіРѕ РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рє SAP)
 ' ============================================================================
 Private Sub PrepareSheets(ByVal wbData As Workbook, ByVal wsReport As Worksheet, _
     ByRef wsData As Worksheet)
@@ -1322,7 +1322,7 @@ Private Sub PrepareSheets(ByVal wbData As Workbook, ByVal wsReport As Worksheet,
             .Range(.Cells(RES_ROW_FIRST, 1), .Cells(rowLast, ERR_COLS_MAX)).Clear
         End If
     End With
-    ' Лист данных пересоздаём (а не Cells.Clear): память листа освобождается полностью
+    ' Р›РёСЃС‚ РґР°РЅРЅС‹С… РїРµСЂРµСЃРѕР·РґР°С‘Рј (Р° РЅРµ Cells.Clear): РїР°РјСЏС‚СЊ Р»РёСЃС‚Р° РѕСЃРІРѕР±РѕР¶РґР°РµС‚СЃСЏ РїРѕР»РЅРѕСЃС‚СЊСЋ
     dataSheetIdx = wbData.Sheets.Count + 1
     If SheetExists(wbData, SHEET_DATA) Then
         dataSheetIdx = wbData.Sheets(SHEET_DATA).Index
@@ -1341,7 +1341,7 @@ Private Sub PrepareSheets(ByVal wbData As Workbook, ByVal wsReport As Worksheet,
 End Sub
 
 ' ============================================================================
-' Распознавание колонок
+' Р Р°СЃРїРѕР·РЅР°РІР°РЅРёРµ РєРѕР»РѕРЅРѕРє
 ' ============================================================================
 Private Sub ResolveColumns(ByRef headerParts As Variant, ByVal colCount As Long, _
     ByRef cols As TCols, ByVal variantName As String)
@@ -1350,49 +1350,49 @@ Private Sub ResolveColumns(ByRef headerParts As Variant, ByVal colCount As Long,
     cols.sumNDD = ResolveColumnIndex(headerParts, colCount, HDR_SUM_NDD)
     cols.sumBE = ResolveColumnIndex(headerParts, colCount, HDR_SUM_BE)
     cols.datePay = ResolveColumnIndex(headerParts, colCount, HDR_DATE_PAY)
-    If cols.datePay = 0 Then cols.datePay = ResolveColumnIndex(headerParts, colCount, "Дата проводки плат")
-    If cols.datePay = 0 Then cols.datePay = ResolveColumnIndex(headerParts, colCount, "Дата оплаты")
+    If cols.datePay = 0 Then cols.datePay = ResolveColumnIndex(headerParts, colCount, "Р”Р°С‚Р° РїСЂРѕРІРѕРґРєРё РїР»Р°С‚")
+    If cols.datePay = 0 Then cols.datePay = ResolveColumnIndex(headerParts, colCount, "Р”Р°С‚Р° РѕРїР»Р°С‚С‹")
     cols.vers = ResolveColumnIndex(headerParts, colCount, HDR_KEY_VERS)
     cols.stp = ResolveColumnIndex(headerParts, colCount, HDR_KEY_STEP, True)
     cols.bukrs = ResolveColumnIndex(headerParts, colCount, HDR_KEY_BUKRS, True)
     cols.gjahr = ResolveColumnIndex(headerParts, colCount, HDR_KEY_GJAHR)
-    If cols.gjahr = 0 Then cols.gjahr = ResolveColumnIndex(headerParts, colCount, "Год", True)
+    If cols.gjahr = 0 Then cols.gjahr = ResolveColumnIndex(headerParts, colCount, "Р“РѕРґ", True)
     cols.monat = ResolveColumnIndex(headerParts, colCount, HDR_KEY_MONAT)
-    If cols.monat = 0 Then cols.monat = ResolveColumnIndex(headerParts, colCount, "Период", True)
+    If cols.monat = 0 Then cols.monat = ResolveColumnIndex(headerParts, colCount, "РџРµСЂРёРѕРґ", True)
     cols.belnr = ResolveColumnIndex(headerParts, colCount, HDR_KEY_BELNR)
-    If cols.belnr = 0 Then cols.belnr = ResolveColumnIndex(headerParts, colCount, "Доку СПП")
+    If cols.belnr = 0 Then cols.belnr = ResolveColumnIndex(headerParts, colCount, "Р”РѕРєСѓ РЎРџРџ")
     cols.docln = ResolveColumnIndex(headerParts, colCount, HDR_KEY_DOCLN)
-    If cols.docln = 0 Then cols.docln = ResolveColumnIndex(headerParts, colCount, "СтрПр", True)
+    If cols.docln = 0 Then cols.docln = ResolveColumnIndex(headerParts, colCount, "РЎС‚СЂРџСЂ", True)
     m_idxDocO = ResolveColumnIndex(headerParts, colCount, HDR_DOC_O)
     m_idxDocSF = ResolveColumnIndex(headerParts, colCount, HDR_DOC_SF)
     If m_docSPPOn Then
         m_idxDocSPP = cols.belnr
         m_idxDocLN = cols.docln
-        If m_idxDocSPP = 0 Then missing = missing & "Документ СПП (в SE16N — «Доку СПП»); "
-        If m_idxDocLN = 0 Then missing = missing & "Строка проводки («СтрПр»); "
-        If m_idxDocSF = 0 Then missing = missing & "Документ ф (номер сч/ф); "
+        If m_idxDocSPP = 0 Then missing = missing & "Р”РѕРєСѓРјРµРЅС‚ РЎРџРџ (РІ SE16N вЂ” В«Р”РѕРєСѓ РЎРџРџВ»); "
+        If m_idxDocLN = 0 Then missing = missing & "РЎС‚СЂРѕРєР° РїСЂРѕРІРѕРґРєРё (В«РЎС‚СЂРџСЂВ»); "
+        If m_idxDocSF = 0 Then missing = missing & "Р”РѕРєСѓРјРµРЅС‚ С„ (РЅРѕРјРµСЂ СЃС‡/С„); "
         If missing <> "" Then
-            Fail "Включён флажок «Документ СПП» (анализ по сцепке документ+позиция+сч/ф), " & _
-                "но в выгрузке нет колонок: " & missing & _
-                "Добавьте их в вариант просмотра /" & variantName & " или снимите флажок."
+            Fail "Р’РєР»СЋС‡С‘РЅ С„Р»Р°Р¶РѕРє В«Р”РѕРєСѓРјРµРЅС‚ РЎРџРџВ» (Р°РЅР°Р»РёР· РїРѕ СЃС†РµРїРєРµ РґРѕРєСѓРјРµРЅС‚+РїРѕР·РёС†РёСЏ+СЃС‡/С„), " & _
+                "РЅРѕ РІ РІС‹РіСЂСѓР·РєРµ РЅРµС‚ РєРѕР»РѕРЅРѕРє: " & missing & _
+                "Р”РѕР±Р°РІСЊС‚Рµ РёС… РІ РІР°СЂРёР°РЅС‚ РїСЂРѕСЃРјРѕС‚СЂР° /" & variantName & " РёР»Рё СЃРЅРёРјРёС‚Рµ С„Р»Р°Р¶РѕРє."
         End If
     Else
         m_idxDocSPP = 0
         m_idxDocLN = 0
     End If
     missing = ""
-    If cols.spp = 0 Then missing = missing & "СПП-элемент; "
-    If cols.sumNDD = 0 Then missing = missing & "Сумма расходов для НДД; "
-    If cols.sumBE = 0 Then missing = missing & "Сумма в валюте балансовой единицы; "
-    If cols.datePay = 0 Then missing = missing & "Дата проводки платежа; "
-    If cols.vers = 0 Then missing = missing & "Версия; "
+    If cols.spp = 0 Then missing = missing & "РЎРџРџ-СЌР»РµРјРµРЅС‚; "
+    If cols.sumNDD = 0 Then missing = missing & "РЎСѓРјРјР° СЂР°СЃС…РѕРґРѕРІ РґР»СЏ РќР”Р”; "
+    If cols.sumBE = 0 Then missing = missing & "РЎСѓРјРјР° РІ РІР°Р»СЋС‚Рµ Р±Р°Р»Р°РЅСЃРѕРІРѕР№ РµРґРёРЅРёС†С‹; "
+    If cols.datePay = 0 Then missing = missing & "Р”Р°С‚Р° РїСЂРѕРІРѕРґРєРё РїР»Р°С‚РµР¶Р°; "
+    If cols.vers = 0 Then missing = missing & "Р’РµСЂСЃРёСЏ; "
     If missing <> "" Then
-        Fail "Не распознаны колонки выгрузки: " & missing & "Заголовки SE16N: " & Join(headerParts, " | ")
+        Fail "РќРµ СЂР°СЃРїРѕР·РЅР°РЅС‹ РєРѕР»РѕРЅРєРё РІС‹РіСЂСѓР·РєРё: " & missing & "Р—Р°РіРѕР»РѕРІРєРё SE16N: " & Join(headerParts, " | ")
     End If
 End Sub
 
 ' ============================================================================
-' Лист данных
+' Р›РёСЃС‚ РґР°РЅРЅС‹С…
 ' ============================================================================
 Private Sub WriteDataSheet(ByVal wsData As Worksheet, ByRef arrData As Variant, _
     ByRef headerParts As Variant, ByVal colCount As Long, ByVal totalRows As Long, _
@@ -1414,7 +1414,7 @@ Private Sub WriteDataSheet(ByVal wsData As Worksheet, ByRef arrData As Variant, 
         For Each kc In keyCols
             If kc > 0 Then .Cells(1, kc).Interior.Color = RGB(189, 215, 238)
         Next kc
-        ' Единая запись массива (порционная запись и AutoFit по листу — медленнее; см. историю 1.36/1.41)
+        ' Р•РґРёРЅР°СЏ Р·Р°РїРёСЃСЊ РјР°СЃСЃРёРІР° (РїРѕСЂС†РёРѕРЅРЅР°СЏ Р·Р°РїРёСЃСЊ Рё AutoFit РїРѕ Р»РёСЃС‚Сѓ вЂ” РјРµРґР»РµРЅРЅРµРµ; СЃРј. РёСЃС‚РѕСЂРёСЋ 1.36/1.41)
         .Cells(2, 1).Resize(totalRows, colCount).Value = arrData
         For c = 1 To colCount
             If sumColFlag(c) Then .Columns(c).NumberFormat = "#,##0.00"
@@ -1431,14 +1431,14 @@ Private Sub WriteDataSheet(ByVal wsData As Worksheet, ByRef arrData As Variant, 
 End Sub
 
 Private Function StageName(ByVal i As Long) As String
-    StageName = Choose(i, "Подключение к SAP", "Подготовка листов (очистка отчёта, пересоздание листа данных)", _
-        "SE16N: условия выборки и запуск", "Ожидание/формирование экспорта (SAP -> буфер обмена)", _
-        "Получение данных (чтение буфера, разбиение на строки, заголовок)", "Разбор в массив", _
-        "Построение кэша ключей строк", "Запись на лист данных", "Блок 1 (качество данных)", _
-        "Блок 2 (сверка версий)", "Блок 3 (консистентность шагов)", _
-        "Вывод отчёта (таблица ошибок, фильтры, ширины)", "ИТОГО")
+    StageName = Choose(i, "РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє SAP", "РџРѕРґРіРѕС‚РѕРІРєР° Р»РёСЃС‚РѕРІ (РѕС‡РёСЃС‚РєР° РѕС‚С‡С‘С‚Р°, РїРµСЂРµСЃРѕР·РґР°РЅРёРµ Р»РёСЃС‚Р° РґР°РЅРЅС‹С…)", _
+        "SE16N: СѓСЃР»РѕРІРёСЏ РІС‹Р±РѕСЂРєРё Рё Р·Р°РїСѓСЃРє", "РћР¶РёРґР°РЅРёРµ/С„РѕСЂРјРёСЂРѕРІР°РЅРёРµ СЌРєСЃРїРѕСЂС‚Р° (SAP -> Р±СѓС„РµСЂ РѕР±РјРµРЅР°)", _
+        "РџРѕР»СѓС‡РµРЅРёРµ РґР°РЅРЅС‹С… (С‡С‚РµРЅРёРµ Р±СѓС„РµСЂР°, СЂР°Р·Р±РёРµРЅРёРµ РЅР° СЃС‚СЂРѕРєРё, Р·Р°РіРѕР»РѕРІРѕРє)", "Р Р°Р·Р±РѕСЂ РІ РјР°СЃСЃРёРІ", _
+        "РџРѕСЃС‚СЂРѕРµРЅРёРµ РєСЌС€Р° РєР»СЋС‡РµР№ СЃС‚СЂРѕРє", "Р—Р°РїРёСЃСЊ РЅР° Р»РёСЃС‚ РґР°РЅРЅС‹С…", "Р‘Р»РѕРє 1 (РєР°С‡РµСЃС‚РІРѕ РґР°РЅРЅС‹С…)", _
+        "Р‘Р»РѕРє 2 (СЃРІРµСЂРєР° РІРµСЂСЃРёР№)", "Р‘Р»РѕРє 3 (РєРѕРЅСЃРёСЃС‚РµРЅС‚РЅРѕСЃС‚СЊ С€Р°РіРѕРІ)", _
+        "Р’С‹РІРѕРґ РѕС‚С‡С‘С‚Р° (С‚Р°Р±Р»РёС†Р° РѕС€РёР±РѕРє, С„РёР»СЊС‚СЂС‹, С€РёСЂРёРЅС‹)", "РРўРћР“Рћ")
 End Function
-' Строки выгрузки -> двумерный массив (1 To maxRows, 1 To colCount); возврат — число строк
+' РЎС‚СЂРѕРєРё РІС‹РіСЂСѓР·РєРё -> РґРІСѓРјРµСЂРЅС‹Р№ РјР°СЃСЃРёРІ (1 To maxRows, 1 To colCount); РІРѕР·РІСЂР°С‚ вЂ” С‡РёСЃР»Рѕ СЃС‚СЂРѕРє
 Private Function ParseDataLines(ByRef clipLines() As String, ByVal headerIdx As Long, _
     ByVal colCount As Long, ByRef sumColFlag() As Boolean, ByVal maxRows As Long, _
     ByRef arrOut As Variant) As Long
@@ -1450,8 +1450,8 @@ Private Function ParseDataLines(ByRef clipLines() As String, ByVal headerIdx As 
     ReDim arrOut(1 To maxRows, 1 To colCount)
     For i = headerIdx + 1 To lastLine
         If i Mod 10000 = 0 Then
-            ShowProgress 40 + CLng((i / lastLine) * 45), "Парсинг строк в массив: " & _
-                Format(i, "#,##0") & " из " & Format(lastLine, "#,##0")
+            ShowProgress 40 + CLng((i / lastLine) * 45), "РџР°СЂСЃРёРЅРі СЃС‚СЂРѕРє РІ РјР°СЃСЃРёРІ: " & _
+                Format(i, "#,##0") & " РёР· " & Format(lastLine, "#,##0")
         End If
         ln = clipLines(i)
         If InStr(ln, "|") > 0 Then
@@ -1469,36 +1469,36 @@ Private Function ParseDataLines(ByRef clipLines() As String, ByVal headerIdx As 
     ParseDataLines = rowN
 End Function
 ' ============================================================================
-' Экспорт SE16N -> буфер обмена -> exportText
+' Р­РєСЃРїРѕСЂС‚ SE16N -> Р±СѓС„РµСЂ РѕР±РјРµРЅР° -> exportText
 ' ============================================================================
 Private Sub ExportSe16n(ByVal sess As Object, ByRef p As TRunParams, _
     ByRef exportText As String, ByRef rowCountSAP As Long)
     Dim grid As Object, dataObj As Object
     Dim waitStage As String
     TimerBegin ST_SE16N
-    ShowProgress 10, "SE16N: открытие транзакции (версия " & p.VersLabel & ", шаг " & p.StepsLabel & ")..."
+    ShowProgress 10, "SE16N: РѕС‚РєСЂС‹С‚РёРµ С‚СЂР°РЅР·Р°РєС†РёРё (РІРµСЂСЃРёСЏ " & p.VersLabel & ", С€Р°Рі " & p.StepsLabel & ")..."
     OpenTransaction "/nse16n"
     SapWaitReady sess
-    ShowProgress 11, "SE16N: загрузка таблицы " & SAP_TABLE_NAME & "..."
+    ShowProgress 11, "SE16N: Р·Р°РіСЂСѓР·РєР° С‚Р°Р±Р»РёС†С‹ " & SAP_TABLE_NAME & "..."
     On Error Resume Next
     SetTextboxValue SAP_SE16N_TABLE, SAP_TABLE_NAME
     On Error GoTo 0
     SendEnter
     SapWaitReady sess
-    ShowProgress 12, "SE16N: загрузка варианта /" & p.VariantName & "..."
+    ShowProgress 12, "SE16N: Р·Р°РіСЂСѓР·РєР° РІР°СЂРёР°РЅС‚Р° /" & p.VariantName & "..."
     SapSetText sess, SAP_SE16N_VARIANT, "/" & p.VariantName
     SendEnter
     SapWaitReady sess
-    SapCheckStatus "Загрузка варианта /" & p.VariantName
+    SapCheckStatus "Р—Р°РіСЂСѓР·РєР° РІР°СЂРёР°РЅС‚Р° /" & p.VariantName
     On Error Resume Next
     SetTextboxValue SAP_SE16N_MAXLINES, ""
     On Error GoTo 0
-    ShowProgress 15, "SE16N: заполнение полей выбора (год " & p.Gjahr & ", период " & p.Monat & _
-        ", версия " & p.VersLabel & ")..."
+    ShowProgress 15, "SE16N: Р·Р°РїРѕР»РЅРµРЅРёРµ РїРѕР»РµР№ РІС‹Р±РѕСЂР° (РіРѕРґ " & p.Gjahr & ", РїРµСЂРёРѕРґ " & p.Monat & _
+        ", РІРµСЂСЃРёСЏ " & p.VersLabel & ")..."
     SapSetText sess, SAP_SE16N_FLD_GJAHR, p.Gjahr
     SapSetText sess, SAP_SE16N_FLD_MONAT, p.Monat
     If p.Vers2 <> "" Then
-        ShowProgress 16, "SE16N: множественный выбор версий " & p.Vers1 & " и " & p.Vers2 & "..."
+        ShowProgress 16, "SE16N: РјРЅРѕР¶РµСЃС‚РІРµРЅРЅС‹Р№ РІС‹Р±РѕСЂ РІРµСЂСЃРёР№ " & p.Vers1 & " Рё " & p.Vers2 & "..."
         SapEl(sess, SAP_SE16N_VERS_MULTI_BTN).SetFocus
         SapEl(sess, SAP_SE16N_VERS_MULTI_BTN).press
         SapSetText sess, SAP_SE16N_MULTI_LOW1, p.Vers1
@@ -1508,7 +1508,7 @@ Private Sub ExportSe16n(ByVal sess As Object, ByRef p As TRunParams, _
         SapSetText sess, SAP_SE16N_FLD_VERS, p.Vers1
     End If
     If p.Step2 <> "" And p.Step2 <> p.Step1 Then
-        ShowProgress 17, "SE16N: множественный выбор шагов " & p.StepsLabel & "..."
+        ShowProgress 17, "SE16N: РјРЅРѕР¶РµСЃС‚РІРµРЅРЅС‹Р№ РІС‹Р±РѕСЂ С€Р°РіРѕРІ " & p.StepsLabel & "..."
         SapEl(sess, SAP_SE16N_STEP_MULTI_BTN).SetFocus
         SapEl(sess, SAP_SE16N_STEP_MULTI_BTN).press
         SapSetText sess, SAP_SE16N_MULTI_LOW1, p.Step1
@@ -1518,27 +1518,27 @@ Private Sub ExportSe16n(ByVal sess As Object, ByRef p As TRunParams, _
         SapSetText sess, SAP_SE16N_FLD_STEP, p.Step1
     End If
     SapWaitReady sess
-    ShowProgress 20, "SE16N: выполнение выборки..."
+    ShowProgress 20, "SE16N: РІС‹РїРѕР»РЅРµРЅРёРµ РІС‹Р±РѕСЂРєРё..."
     SapEl(sess, SAP_SE16N_EXECUTE_BTN).press
     SapWaitReady sess
-    SapCheckStatus "Выполнение выборки"
-    ShowProgress 22, "SE16N: чтение результата выборки..."
+    SapCheckStatus "Р’С‹РїРѕР»РЅРµРЅРёРµ РІС‹Р±РѕСЂРєРё"
+    ShowProgress 22, "SE16N: С‡С‚РµРЅРёРµ СЂРµР·СѓР»СЊС‚Р°С‚Р° РІС‹Р±РѕСЂРєРё..."
     Set grid = SapEl(sess, SAP_SE16N_GRID)
     rowCountSAP = grid.rowCount
-    If rowCountSAP <= 0 Then Fail "Отчёт SE16N пуст по указанным условиям выборки. Нет данных для обработки."
+    If rowCountSAP <= 0 Then Fail "РћС‚С‡С‘С‚ SE16N РїСѓСЃС‚ РїРѕ СѓРєР°Р·Р°РЅРЅС‹Рј СѓСЃР»РѕРІРёСЏРј РІС‹Р±РѕСЂРєРё. РќРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё."
     If rowCountSAP + 1 > m_wsData.Rows.Count Then
-        Fail "В выгрузке " & Format(rowCountSAP, "#,##0") & " строк — больше лимита листа Excel (" & _
-            Format(m_wsData.Rows.Count - 1, "#,##0") & "). Сузьте выборку (шаги/версии/период)."
+        Fail "Р’ РІС‹РіСЂСѓР·РєРµ " & Format(rowCountSAP, "#,##0") & " СЃС‚СЂРѕРє вЂ” Р±РѕР»СЊС€Рµ Р»РёРјРёС‚Р° Р»РёСЃС‚Р° Excel (" & _
+            Format(m_wsData.Rows.Count - 1, "#,##0") & "). РЎСѓР·СЊС‚Рµ РІС‹Р±РѕСЂРєСѓ (С€Р°РіРё/РІРµСЂСЃРёРё/РїРµСЂРёРѕРґ)."
     End If
     TimerEnd ST_SE16N
     TimerBegin ST_EXPORT
-    waitStage = "SE16N: выборка готова (" & rowCountSAP & " строк). Экспорт в буфер обмена..."
+    waitStage = "SE16N: РІС‹Р±РѕСЂРєР° РіРѕС‚РѕРІР° (" & rowCountSAP & " СЃС‚СЂРѕРє). Р­РєСЃРїРѕСЂС‚ РІ Р±СѓС„РµСЂ РѕР±РјРµРЅР°..."
     ShowProgress 23, waitStage
     Set dataObj = CreateObject("New:{1C3B4210-F441-11CE-B9EA-00AA006B1A69}")
     If Not ClearClipboard(dataObj, 10) Then
-        Fail "Буфер обмена занят другим приложением (не удалось очистить за 10 попыток). " & _
-            "Закройте программы, работающие с буфером (RDP, история Win+V, менеджеры буфера), " & _
-            "и запустите скрипт снова."
+        Fail "Р‘СѓС„РµСЂ РѕР±РјРµРЅР° Р·Р°РЅСЏС‚ РґСЂСѓРіРёРј РїСЂРёР»РѕР¶РµРЅРёРµРј (РЅРµ СѓРґР°Р»РѕСЃСЊ РѕС‡РёСЃС‚РёС‚СЊ Р·Р° 10 РїРѕРїС‹С‚РѕРє). " & _
+            "Р—Р°РєСЂРѕР№С‚Рµ РїСЂРѕРіСЂР°РјРјС‹, СЂР°Р±РѕС‚Р°СЋС‰РёРµ СЃ Р±СѓС„РµСЂРѕРј (RDP, РёСЃС‚РѕСЂРёСЏ Win+V, РјРµРЅРµРґР¶РµСЂС‹ Р±СѓС„РµСЂР°), " & _
+            "Рё Р·Р°РїСѓСЃС‚РёС‚Рµ СЃРєСЂРёРїС‚ СЃРЅРѕРІР°."
     End If
     grid.pressToolbarContextButton "&MB_EXPORT"
     grid.selectContextMenuItem "&PC"
@@ -1546,13 +1546,13 @@ Private Sub ExportSe16n(ByVal sess As Object, ByRef p As TRunParams, _
     SapEl(sess, SAP_EXPORT_DLG_FLAG).SetFocus
     SapEl(sess, SAP_EXPORT_DLG_OK).press
     If Not WaitClipboardText(dataObj, "|", CLIP_WAIT_SEC, exportText, 23, waitStage) Then
-        Fail "Система SAP не успела передать данные в буфер обмена за " & _
-            Format(CLIP_WAIT_SEC, "0") & " сек. Попробуйте запустить скрипт снова."
+        Fail "РЎРёСЃС‚РµРјР° SAP РЅРµ СѓСЃРїРµР»Р° РїРµСЂРµРґР°С‚СЊ РґР°РЅРЅС‹Рµ РІ Р±СѓС„РµСЂ РѕР±РјРµРЅР° Р·Р° " & _
+            Format(CLIP_WAIT_SEC, "0") & " СЃРµРє. РџРѕРїСЂРѕР±СѓР№С‚Рµ Р·Р°РїСѓСЃС‚РёС‚СЊ СЃРєСЂРёРїС‚ СЃРЅРѕРІР°."
     End If
     TimerEnd ST_EXPORT
 End Sub
 ' ============================================================================
-' Текст выгрузки -> массив данных + заголовок
+' РўРµРєСЃС‚ РІС‹РіСЂСѓР·РєРё -> РјР°СЃСЃРёРІ РґР°РЅРЅС‹С… + Р·Р°РіРѕР»РѕРІРѕРє
 ' ============================================================================
 Private Sub ParseExport(ByRef exportText As String, ByVal rowCountSAP As Long, _
     ByRef arrData As Variant, ByRef headerParts As Variant, ByRef colCount As Long, _
@@ -1560,30 +1560,30 @@ Private Sub ParseExport(ByRef exportText As String, ByVal rowCountSAP As Long, _
     Dim clipLines() As String
     Dim headerIdx As Long
     TimerBegin ST_GET
-    ShowProgress 33, "Данные из буфера обмена получены (" & Format(Len(exportText), "#,##0") & " симв.). Разбор строк..."
+    ShowProgress 33, "Р”Р°РЅРЅС‹Рµ РёР· Р±СѓС„РµСЂР° РѕР±РјРµРЅР° РїРѕР»СѓС‡РµРЅС‹ (" & Format(Len(exportText), "#,##0") & " СЃРёРјРІ.). Р Р°Р·Р±РѕСЂ СЃС‚СЂРѕРє..."
     SplitExportLines exportText, clipLines
     exportText = ""
-    ShowProgress 37, "Поиск строки заголовка в выгрузке..."
+    ShowProgress 37, "РџРѕРёСЃРє СЃС‚СЂРѕРєРё Р·Р°РіРѕР»РѕРІРєР° РІ РІС‹РіСЂСѓР·РєРµ..."
     headerIdx = FindHeaderLine(clipLines)
     If headerIdx < 0 Then
-        Fail "Не удалось найти строку заголовка в выгрузке SE16N! Проверьте вариант просмотра /" & variantName & "."
+        Fail "РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё СЃС‚СЂРѕРєСѓ Р·Р°РіРѕР»РѕРІРєР° РІ РІС‹РіСЂСѓР·РєРµ SE16N! РџСЂРѕРІРµСЂСЊС‚Рµ РІР°СЂРёР°РЅС‚ РїСЂРѕСЃРјРѕС‚СЂР° /" & variantName & "."
     End If
     headerParts = Split(clipLines(headerIdx), "|")
     PrepareHeader headerParts, colCount, sumColFlag
     TimerEnd ST_GET
     TimerBegin ST_PARSE
-    ShowProgress 40, "Заголовок найден (" & colCount & " колонок). Парсинг " & rowCountSAP & " строк в массив..."
+    ShowProgress 40, "Р—Р°РіРѕР»РѕРІРѕРє РЅР°Р№РґРµРЅ (" & colCount & " РєРѕР»РѕРЅРѕРє). РџР°СЂСЃРёРЅРі " & rowCountSAP & " СЃС‚СЂРѕРє РІ РјР°СЃСЃРёРІ..."
     totalRows = ParseDataLines(clipLines, headerIdx, colCount, sumColFlag, rowCountSAP, arrData)
     Erase clipLines
     TimerEnd ST_PARSE
     If totalRows = 0 Then
-        Fail "Выгрузка SE16N получена, но строки данных не распознаны. Проверьте вариант просмотра /" & variantName & "."
+        Fail "Р’С‹РіСЂСѓР·РєР° SE16N РїРѕР»СѓС‡РµРЅР°, РЅРѕ СЃС‚СЂРѕРєРё РґР°РЅРЅС‹С… РЅРµ СЂР°СЃРїРѕР·РЅР°РЅС‹. РџСЂРѕРІРµСЂСЊС‚Рµ РІР°СЂРёР°РЅС‚ РїСЂРѕСЃРјРѕС‚СЂР° /" & variantName & "."
     End If
 End Sub
 ' ============================================================================
-' ОСНОВНАЯ ПРОЦЕДУРА
-' Алгоритм: параметры -> подключение к SAP -> очистка листов -> SE16N + экспорт в буфер обмена
-'   -> парсинг -> колонки -> кэш -> лист данных -> проверки (Блоки 1-3) -> отчёт -> замеры
+' РћРЎРќРћР’РќРђРЇ РџР РћР¦Р•Р”РЈР Рђ
+' РђР»РіРѕСЂРёС‚Рј: РїР°СЂР°РјРµС‚СЂС‹ -> РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє SAP -> РѕС‡РёСЃС‚РєР° Р»РёСЃС‚РѕРІ -> SE16N + СЌРєСЃРїРѕСЂС‚ РІ Р±СѓС„РµСЂ РѕР±РјРµРЅР°
+'   -> РїР°СЂСЃРёРЅРі -> РєРѕР»РѕРЅРєРё -> РєСЌС€ -> Р»РёСЃС‚ РґР°РЅРЅС‹С… -> РїСЂРѕРІРµСЂРєРё (Р‘Р»РѕРєРё 1-3) -> РѕС‚С‡С‘С‚ -> Р·Р°РјРµСЂС‹
 ' ============================================================================
 Public Sub PDChange()
     Dim p As TRunParams
@@ -1605,12 +1605,12 @@ Public Sub PDChange()
     m_stage = ""
     m_dtThreshold = DateSerial(2025, 1, 1)
     SaveExcelState
-    ShowProgress 0, "Подготовка: чтение параметров с листа '" & SHEET_REPORT & "'..."
+    ShowProgress 0, "РџРѕРґРіРѕС‚РѕРІРєР°: С‡С‚РµРЅРёРµ РїР°СЂР°РјРµС‚СЂРѕРІ СЃ Р»РёСЃС‚Р° '" & SHEET_REPORT & "'..."
     Set wbData = ActiveWorkbook
-    If wbData Is Nothing Then Fail "Не открыта рабочая книга!"
+    If wbData Is Nothing Then Fail "РќРµ РѕС‚РєСЂС‹С‚Р° СЂР°Р±РѕС‡Р°СЏ РєРЅРёРіР°!"
     If Not SheetExists(wbData, SHEET_REPORT) Then
-        Fail "В активной книге '" & wbData.Name & "' нет листа '" & SHEET_REPORT & "'. " & _
-            "Активируйте книгу с отчётом и запустите макрос снова."
+        Fail "Р’ Р°РєС‚РёРІРЅРѕР№ РєРЅРёРіРµ '" & wbData.Name & "' РЅРµС‚ Р»РёСЃС‚Р° '" & SHEET_REPORT & "'. " & _
+            "РђРєС‚РёРІРёСЂСѓР№С‚Рµ РєРЅРёРіСѓ СЃ РѕС‚С‡С‘С‚РѕРј Рё Р·Р°РїСѓСЃС‚РёС‚Рµ РјР°РєСЂРѕСЃ СЃРЅРѕРІР°."
     End If
     Set wsReport = wbData.Worksheets(SHEET_REPORT)
     Set m_wsReport = wsReport
@@ -1619,13 +1619,13 @@ Public Sub PDChange()
     m_docSPPOn = (chkDocSPP.Value = xlOn)
     ReadParams wsReport, p
     dtPeriodEnd = DateSerial(CInt(p.Gjahr), IIf(CLng(p.Monat) > 12, 12, CLng(p.Monat)) + 1, 0)
-    ShowProgress 2, "Параметры приняты (версии " & p.VersLabel & ", шаги " & p.StepsLabel & "). Подключение к SAP..."
+    ShowProgress 2, "РџР°СЂР°РјРµС‚СЂС‹ РїСЂРёРЅСЏС‚С‹ (РІРµСЂСЃРёРё " & p.VersLabel & ", С€Р°РіРё " & p.StepsLabel & "). РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє SAP..."
     TimerBegin ST_CONNECT
     Set sess = SAP_Connection()
     TimerEnd ST_CONNECT
     If sess Is Nothing Then
-        Fail "Не удалось подключиться к SAP (SAP_Connection вернула Nothing). " & _
-            "Проверьте, что SAP GUI запущен, выполнен вход и включён Scripting."
+        Fail "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ Рє SAP (SAP_Connection РІРµСЂРЅСѓР»Р° Nothing). " & _
+            "РџСЂРѕРІРµСЂСЊС‚Рµ, С‡С‚Рѕ SAP GUI Р·Р°РїСѓС‰РµРЅ, РІС‹РїРѕР»РЅРµРЅ РІС…РѕРґ Рё РІРєР»СЋС‡С‘РЅ Scripting."
     End If
     TimerBegin ST_PREP
     PrepareSheets wbData, wsReport, wsData
@@ -1634,33 +1634,33 @@ Public Sub PDChange()
     Application.Calculation = xlCalculationManual
     Application.EnableEvents = False
     Application.Interactive = False
-    ShowProgress 5, "SAP подключён. Работа с SE16N..."
+    ShowProgress 5, "SAP РїРѕРґРєР»СЋС‡С‘РЅ. Р Р°Р±РѕС‚Р° СЃ SE16N..."
     ExportSe16n sess, p, exportText, rowCountSAP
     ParseExport exportText, rowCountSAP, arrData, headerParts, colCount, sumColFlag, totalRows, p.VariantName
     m_runRows = totalRows
-    ShowProgress 89, "Данные разобраны (" & Format(totalRows, "#,##0") & " строк). Распознавание колонок..."
+    ShowProgress 89, "Р”Р°РЅРЅС‹Рµ СЂР°Р·РѕР±СЂР°РЅС‹ (" & Format(totalRows, "#,##0") & " СЃС‚СЂРѕРє). Р Р°СЃРїРѕР·РЅР°РІР°РЅРёРµ РєРѕР»РѕРЅРѕРє..."
     ResolveColumns headerParts, colCount, cols, p.VariantName
-    ShowProgress 90, "Колонки распознаны: СПП=" & cols.spp & ", M=" & cols.sumNDD & _
-        ", N=" & cols.sumBE & ", Дата=" & cols.datePay & ", Версия=" & cols.vers
+    ShowProgress 90, "РљРѕР»РѕРЅРєРё СЂР°СЃРїРѕР·РЅР°РЅС‹: РЎРџРџ=" & cols.spp & ", M=" & cols.sumNDD & _
+        ", N=" & cols.sumBE & ", Р”Р°С‚Р°=" & cols.datePay & ", Р’РµСЂСЃРёСЏ=" & cols.vers
     TimerBegin ST_CACHE
     BuildRowCache arrData, totalRows, cols, p.arrSteps
     TimerEnd ST_CACHE
-    ShowProgress 91, "Выгрузка данных на лист (" & Format(totalRows, "#,##0") & " строк x " & colCount & " колонок)..."
+    ShowProgress 91, "Р’С‹РіСЂСѓР·РєР° РґР°РЅРЅС‹С… РЅР° Р»РёСЃС‚ (" & Format(totalRows, "#,##0") & " СЃС‚СЂРѕРє x " & colCount & " РєРѕР»РѕРЅРѕРє)..."
     TimerBegin ST_WRITE
     WriteDataSheet wsData, arrData, headerParts, colCount, totalRows, sumColFlag, cols
     ClearArray arrData
     TimerEnd ST_WRITE
-    ShowProgress 92, "Выполнение проверок (Блоки 1-3)..."
+    ShowProgress 92, "Р’С‹РїРѕР»РЅРµРЅРёРµ РїСЂРѕРІРµСЂРѕРє (Р‘Р»РѕРєРё 1-3)..."
     InitErrBatch
     TimerBegin ST_REPORT
     resRow = RES_ROW_FIRST
-    wsReport.Cells(resRow, 1).Value = "РЕЗУЛЬТАТЫ ПРОВЕРОК"
+    wsReport.Cells(resRow, 1).Value = "Р Р•Р—РЈР›Р¬РўРђРўР« РџР РћР’Р•Р РћРљ"
     wsReport.Cells(resRow, 1).Font.Bold = True
     resRow = resRow + 1
-    wsReport.Cells(resRow, 1).Value = "Выгружено строк: " & totalRows & _
-        " | Версии: " & p.VersLabel & " | Шаги: " & p.StepsLabel & _
-        " | Год/период: " & p.Gjahr & "/" & p.Monat & _
-        IIf(m_docSPPOn, " | Документ СПП: вкл", "")
+    wsReport.Cells(resRow, 1).Value = "Р’С‹РіСЂСѓР¶РµРЅРѕ СЃС‚СЂРѕРє: " & totalRows & _
+        " | Р’РµСЂСЃРёРё: " & p.VersLabel & " | РЁР°РіРё: " & p.StepsLabel & _
+        " | Р“РѕРґ/РїРµСЂРёРѕРґ: " & p.Gjahr & "/" & p.Monat & _
+        IIf(m_docSPPOn, " | Р”РѕРєСѓРјРµРЅС‚ РЎРџРџ: РІРєР»", "")
     resRow = resRow + 2
     TimerEnd ST_REPORT
     nVers = UBound(p.arrVers) - LBound(p.arrVers) + 1
@@ -1695,15 +1695,15 @@ Public Sub PDChange()
     If m_hdrWritten Then
         wsReport.Range(wsReport.Cells(m_hdrRow, 1), wsReport.Cells(resRow - 1, ERR_COLS)).AutoFilter
     Else
-        wsReport.Cells(resRow, 1).Value = "Ошибок не выявлено"
+        wsReport.Cells(resRow, 1).Value = "РћС€РёР±РѕРє РЅРµ РІС‹СЏРІР»РµРЅРѕ"
         wsReport.Cells(resRow, 1).Font.Bold = True
         resRow = resRow + 1
     End If
-    ShowProgress 99, "Финальное оформление отчёта (ширины колонок, фильтры)..."
+    ShowProgress 99, "Р¤РёРЅР°Р»СЊРЅРѕРµ РѕС„РѕСЂРјР»РµРЅРёРµ РѕС‚С‡С‘С‚Р° (С€РёСЂРёРЅС‹ РєРѕР»РѕРЅРѕРє, С„РёР»СЊС‚СЂС‹)..."
     SetErrColumnWidths wsReport
     TimerEnd ST_REPORT
-    runNo = WriteTimings(True, "Версии " & p.VersLabel & "; шаги " & p.StepsLabel & "; период " & _
-        p.Gjahr & "/" & p.Monat & "; Документ СПП: " & IIf(m_docSPPOn, "вкл", "выкл") & _
+    runNo = WriteTimings(True, "Р’РµСЂСЃРёРё " & p.VersLabel & "; С€Р°РіРё " & p.StepsLabel & "; РїРµСЂРёРѕРґ " & _
+        p.Gjahr & "/" & p.Monat & "; Р”РѕРєСѓРјРµРЅС‚ РЎРџРџ: " & IIf(m_docSPPOn, "РІРєР»", "РІС‹РєР»") & _
         "")
     totalSec = ElapsedSec(m_startTime)
     Set sess = Nothing
@@ -1711,19 +1711,19 @@ Public Sub PDChange()
     wsReport.Calculate
     ActivateExcel
     wsReport.Activate
-    ShowProgress 100, "Готово (прогон " & runNo & "): " & Round(totalSec, 1) & " сек"
-    MsgBox "Выполнено успешно (прогон № " & runNo & ", " & Format(totalSec, "0.0") & _
-        " сек). Результаты проверок — на листе '" & SHEET_REPORT & "', замеры — на листе '" & SHEET_TECH & "'.", vbInformation
+    ShowProgress 100, "Р“РѕС‚РѕРІРѕ (РїСЂРѕРіРѕРЅ " & runNo & "): " & Round(totalSec, 1) & " СЃРµРє"
+    MsgBox "Р’С‹РїРѕР»РЅРµРЅРѕ СѓСЃРїРµС€РЅРѕ (РїСЂРѕРіРѕРЅ в„– " & runNo & ", " & Format(totalSec, "0.0") & _
+        " СЃРµРє). Р РµР·СѓР»СЊС‚Р°С‚С‹ РїСЂРѕРІРµСЂРѕРє вЂ” РЅР° Р»РёСЃС‚Рµ '" & SHEET_REPORT & "', Р·Р°РјРµСЂС‹ вЂ” РЅР° Р»РёСЃС‚Рµ '" & SHEET_TECH & "'.", vbInformation
     Exit Sub
 ErrorHandler:
     errNum = Err.Number
     errDesc = Err.Description
-    errMsgFull = "Описание: " & errDesc
-    If errNum <> ERR_CUSTOM And errNum <> 0 Then errMsgFull = errMsgFull & vbCrLf & "Код ошибки: " & errNum
-    If Len(m_stage) > 0 Then errMsgFull = errMsgFull & vbCrLf & "Этап: " & m_stage
-    runNo = WriteTimings(False, errDesc & " | этап: " & m_stage)
+    errMsgFull = "РћРїРёСЃР°РЅРёРµ: " & errDesc
+    If errNum <> ERR_CUSTOM And errNum <> 0 Then errMsgFull = errMsgFull & vbCrLf & "РљРѕРґ РѕС€РёР±РєРё: " & errNum
+    If Len(m_stage) > 0 Then errMsgFull = errMsgFull & vbCrLf & "Р­С‚Р°Рї: " & m_stage
+    runNo = WriteTimings(False, errDesc & " | СЌС‚Р°Рї: " & m_stage)
     Set sess = Nothing
     CleanupRun False
-    MsgBox "Произошла ошибка при выполнении макроса:" & vbCrLf & errMsgFull, vbCritical, "Ошибка выполнения"
+    MsgBox "РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё РІС‹РїРѕР»РЅРµРЅРёРё РјР°РєСЂРѕСЃР°:" & vbCrLf & errMsgFull, vbCritical, "РћС€РёР±РєР° РІС‹РїРѕР»РЅРµРЅРёСЏ"
     ActivateExcel
 End Sub
