@@ -1,0 +1,4 @@
+*.bas text eol=crlf working-tree-encoding=CP1251 diff
+*.zip binary
+# Legacy module kept as-is: stored and checked out as raw cp1251 bytes.
+vba-sap/v_file.bas -text -eol -working-tree-encoding
